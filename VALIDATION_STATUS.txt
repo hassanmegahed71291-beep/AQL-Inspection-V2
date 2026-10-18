@@ -1,0 +1,14 @@
+AQL build validation (static checks)
+
+- Preserved latest microphone-enabled AQL inspection HTML.
+- Merged Supabase cloud workspace/account/sync panel.
+- Added upload/download conversion for image data URLs to private Supabase Storage paths.
+- Added PWA manifest, icons, and service-worker shell.
+- Added Capacitor Android/iOS configuration and native speech-recognition bridge.
+- JavaScript syntax checks for all inline scripts: PASSED.
+- Native speech bridge syntax check: PASSED.
+- JSON validation for package.json and manifest: PASSED.
+- ZIP archive integrity check: PASSED.
+- `npm install` did not complete within the available command time; Vite build therefore NOT RUN.
+- Live Supabase database/storage roundtrip: NOT RUN.
+- Physical Android/iPhone microphone, camera, PDF/Excel share, and store builds: NOT RUN; require real devices/build environments.

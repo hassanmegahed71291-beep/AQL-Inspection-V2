@@ -1,0 +1,5 @@
+<!-- Add these entries inside the top-level <dict> in ios/App/App/Info.plist after running `npx cap add ios`. -->
+<key>NSSpeechRecognitionUsageDescription</key>
+<string>AQL uses speech recognition to enter garment measurements by voice.</string>
+<key>NSMicrophoneUsageDescription</key>
+<string>AQL uses the microphone when you choose voice measurement entry.</string>
