@@ -15,7 +15,12 @@
     "@capacitor-community/speech-recognition": "^7.0.1",
     "@capacitor/android": "^7.0.0",
     "@capacitor/core": "^7.0.0",
-    "@capacitor/ios": "^7.0.0"
+    "@capacitor/ios": "^7.0.0",
+    "@supabase/supabase-js": "^2.30.0",
+    "localforage": "^1.10.0",
+    "cropperjs": "^2.4.5",
+    "uuid": "^9.0.0",
+    "date-fns": "^2.30.0"
   },
   "devDependencies": {
     "@capacitor/cli": "^7.0.0",
