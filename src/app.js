@@ -31,3 +31,22 @@ const sevL={critical:['Critical','حرج'],major:['Major','رئيسي'],minor:['
 const stL=s=>({draft:L('Draft','مسودة'),in_progress:L('In progress','قيد التنفيذ'),pending_review:L('Pending review','بانتظار المراجعة'),approved:L('Approved','معتد'),rejected:L('Rejected','مرفوض')}[s]||L(s,s));
 function applyTheme(){const theme=S.theme||'light';document.documentElement.dataset.theme=theme;document.documentElement.style.colorScheme=theme==='dark'?'dark':'light';LS.set(THEME_KEY,theme)}
 function setTheme(theme){S.theme=theme;applyTheme();render();}
+let AUTO_SAVE_TIMER=null;
+function startAutoSave(){clearInterval(AUTO_SAVE_TIMER);AUTO_SAVE_TIMER=setInterval(async()=>{if(!D||!dirty||!EDIT.includes(D.status))return;const path=ROUTE||'#/';if(path.startsWith('#/new')||path.startsWith('#/i/')){try{await persistCurrentDraft(true)}catch(e){console.warn('Auto-save failed',e)}}},5000)}
+async function persistCurrentDraft(silent=false){if(!D||!EDIT.includes(D.status))return;const snapshot=structuredClone(D);syncDerived();if(!snapshot.id||!snapshot.orderNo&&!snapshot.customer&&!snapshot.model){return;}const idx=S.ins.findIndex(x=>x.id===D.id);if(idx>=0){S.ins[idx]=structuredClone(D)}else{S.ins.unshift(structuredClone(D))}await DB.put('inspections',D);dirty=false;localStorage.setItem('aql-last-draft',JSON.stringify({id:D.id,ts:Date.now(),data:D}));if(!silent)okMsg=L('Draft saved automatically.','تم حفظ المسودة تلقائياً.');}
+function showLeaveModal(onSave,onDiscard,onCancel){const old=$('.leave-modal');if(old)old.remove();
+  const wrap=h('div',{class:'leave-modal modal-backdrop'},
+    h('div',{class:'modal-card'},
+      h('h3',{},L('Save changes?','حفظ التغييرات؟')),
+      h('p',{class:'hint'},L('Your changes have not been saved yet.','لديك تغييرات لم يتم حفظها بعد.')),
+      h('div',{class:'row wrap',style:'justify-content:flex-end'},
+        h('button',{class:'btn',type:'button',onClick:()=>{onCancel&&onCancel();closeLeaveModal();}},L('Cancel','إلغاء')),
+        h('button',{class:'btn',type:'button',onClick:()=>{onDiscard&&onDiscard();closeLeaveModal();}},L("Don't save","لا تحفظ")),
+        h('button',{class:'btn p',type:'button',onClick:async()=>{await onSave?.();closeLeaveModal();}},L('Save','حفظ'))
+      )
+    )
+  );
+  document.body.appendChild(wrap);
+}
+function closeLeaveModal(){const m=$('.leave-modal');if(m)m.remove();}
+/* ---------- storage (IndexedDB, this device only) ---------- */
