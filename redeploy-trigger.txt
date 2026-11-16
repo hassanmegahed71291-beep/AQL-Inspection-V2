@@ -1,5 +1,0 @@
-Redeploy trigger
-
-This file was added to trigger a redeploy on Vercel.
-
-Timestamp: 2026-10-18T13:55:00Z
