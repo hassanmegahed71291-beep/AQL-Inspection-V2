@@ -200,3 +200,4 @@ html[data-theme="dark"] .pie-total{background:#121e30}
 .pie-leg li i{width:12px;height:12px;border-radius:3px;flex:0 0 auto}
 .pie-leg li span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pie-leg li b{white-space:nowrap}
+.mt td.meas-out{background:#ef4444!important;color:#fff!important;font-weight:800!important;outline:1px solid #b91c1c}

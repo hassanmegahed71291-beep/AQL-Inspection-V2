@@ -12,3 +12,8 @@ AQL build validation (static checks)
 - `npm install` did not complete within the available command time; Vite build therefore NOT RUN.
 - Live Supabase database/storage roundtrip: NOT RUN.
 - Physical Android/iPhone microphone, camera, PDF/Excel share, and store builds: NOT RUN; require real devices/build environments.
+
+- Monthly Quality Report page added with month/customer/model/inspector filters and shared factory logo setting.
+- Monthly PDF export uses the existing jsPDF/html2canvas vendor libraries.
+- Updated app.js JavaScript syntax check: PASSED.
+- Full Vite build and browser/PDF rendering test: NOT RUN (dependencies/runtime not available in this review environment).
