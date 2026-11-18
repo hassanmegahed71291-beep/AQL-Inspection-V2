@@ -1,8 +1,8 @@
 {
-  "name": "aql-inspection-app",
+  "name": "meyar-inspection-app",
   "version": "1.0.0",
   "private": true,
-  "description": "AQL cross-platform inspection app",
+  "description": "MEYAR cross-platform quality inspection app",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",

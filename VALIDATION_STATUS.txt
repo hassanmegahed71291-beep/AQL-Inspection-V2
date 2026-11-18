@@ -17,3 +17,10 @@ AQL build validation (static checks)
 - Monthly PDF export uses the existing jsPDF/html2canvas vendor libraries.
 - Updated app.js JavaScript syntax check: PASSED.
 - Full Vite build and browser/PDF rendering test: NOT RUN (dependencies/runtime not available in this review environment).
+
+- Customer-vs-factory comparison page (17 Nov 2026): node --check app.js PASSED.
+- Tested in headless Chromium (desktop engine, 412px phone viewport) against generated sample PDFs: upload, text extraction, order selection, field/defect comparison, PDF issue (multi-page, logo, appendix), save/re-issue (no duplicate), reload persistence, download from archive, delete, scanned-PDF fallback, invalid-file error, Arabic/dark rendering, inspector access blocked, all existing routes still render, IndexedDB upgrade v1->v2 keeps existing data: PASSED.
+- NOT RUN: real customer PDFs (only synthetic samples), Vite build, Android/iPhone devices (file picker, share sheet), Supabase sync of comparisons (not implemented).
+
+- MEYAR rebrand update (18 Nov 2026): preserved the existing AQL Inspection project and data model; added a 3D-style M + underline app icon in 192/512 sizes, MEYAR wordmark using the same M mark, updated PWA/Apple metadata and Capacitor app label, moved the dark-mode toggle from the authenticated top bar into the navigation menu, and migrated the stored platform display name to MEYAR without resetting inspection data.
+- Validation: app.js syntax check PASSED; package and both manifest JSON validations PASSED; icon assets generated. Full Vite build and live browser/device testing NOT RUN in this environment.

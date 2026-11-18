@@ -35,15 +35,15 @@ const sevL={critical:['Critical','حرج'],major:['Major','رئيسي'],minor:['
 const stL=s=>({draft:L('Draft','مسودة'),in_progress:L('In progress','قيد التنفيذ'),pending_review:L('Pending review','بانتظار المراجعة'),approved:L('Approved','معتمد'),rejected:L('Rejected','مرفوض')})[s]||s;
 /* ---------- storage (IndexedDB, this device only) ---------- */
 const DB={db:null,
-  open(){return new Promise((res,rej)=>{const r=indexedDB.open('aql-inspection',1);r.onupgradeneeded=()=>{['kv','library','plans','inspections'].forEach(s=>r.result.createObjectStore(s,{keyPath:'id'}))};r.onsuccess=()=>{this.db=r.result;res()};r.onerror=()=>rej(r.error)})},
+  open(){return new Promise((res,rej)=>{const r=indexedDB.open('aql-inspection',2);r.onupgradeneeded=()=>{['kv','library','plans','inspections','comparisons','cmpfiles'].forEach(s=>{if(!r.result.objectStoreNames.contains(s))r.result.createObjectStore(s,{keyPath:'id'})})};r.onsuccess=()=>{this.db=r.result;res()};r.onerror=()=>rej(r.error)})},
   tx(s,m,f){return new Promise((res,rej)=>{const t=this.db.transaction(s,m);let r;try{r=f(t.objectStore(s))}catch(e){return rej(e)}t.oncomplete=()=>res(r&&r.result);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error)})},
-  all(s){return this.tx(s,'readonly',st=>st.getAll())},put(s,o){return this.tx(s,'readwrite',st=>st.put(o))},clear(s){return this.tx(s,'readwrite',st=>st.clear())},del(s,id){return this.tx(s,'readwrite',st=>st.delete(id))}};
+  all(s){return this.tx(s,'readonly',st=>st.getAll())},get(s,id){return this.tx(s,'readonly',st=>st.get(id))},put(s,o){return this.tx(s,'readwrite',st=>st.put(o))},clear(s){return this.tx(s,'readwrite',st=>st.clear())},del(s,id){return this.tx(s,'readwrite',st=>st.delete(id))}};
 const DEPTS=[['Cutting','القص'],['Front Preparation','تجهيز الأمام'],['Sleeve Preparation','تجهيز الأكمام'],['Lining Preparation','تجهيز البطانة'],['Assembly','التجميع'],['Pressing','الكي'],['Packing','التعبئة']];
-const defSettings=()=>({id:'settings',platformName:'AQL Inspection',factoryName:'ALPHA OMEGA EGYPT',inspectorName:'',jacket:DEPTS.map(([en,ar])=>({id:'d_'+uid(6),en,ar,active:true})),trousers:[],vest:[],shorts:[],minDefPages:2,minItemPages:0});
+const defSettings=()=>({id:'settings',platformName:'MEYAR',factoryName:'ALPHA OMEGA EGYPT',inspectorName:'',jacket:DEPTS.map(([en,ar])=>({id:'d_'+uid(6),en,ar,active:true})),trousers:[],vest:[],shorts:[],minDefPages:2,minItemPages:0});
 async function loadAll(){S.lib=await DB.all('library');S.plans=await DB.all('plans');const allIns=(await DB.all('inspections')).sort((a,b)=>b.createdAt-a.createdAt),lim=Date.now()-30*864e5,keepIns=[];
   for(const x of allIns){if(x.deletedAt&&x.deletedAt<lim){try{await DB.del('inspections',x.id)}catch(e){}}else keepIns.push(x)}
   S.ins=keepIns.filter(x=>!x.deletedAt);S.trash=keepIns.filter(x=>x.deletedAt);S.ins.forEach(migratePhotos);
-  const kv=await DB.all('kv');S.settings=kv.find(x=>x.id==='settings');if(!S.settings){S.settings=defSettings();await DB.put('kv',S.settings)}
+  const kv=await DB.all('kv');S.settings=kv.find(x=>x.id==='settings');if(!S.settings){S.settings=defSettings();await DB.put('kv',S.settings)}else if(S.settings.platformName!=='MEYAR'){S.settings.platformName='MEYAR';await DB.put('kv',S.settings)}
   S.audit=(kv.find(x=>x.id==='audit')||{items:[]}).items;SINGLE.forEach(g=>{S.settings[g]=S.settings[g]||[]});
   S.members=(kv.find(x=>x.id==='members')||{items:[]}).items;S.lists=kv.find(x=>x.id==='lists')||{id:'lists',customers:[]};
   S.me=S.members.find(m=>m.active&&m.id===(SS.get('meId')||LS.get('meId')))||null;await seedDefaults(kv)}
@@ -76,16 +76,16 @@ function validateRows(rows){const e=[];const s=[...rows].sort((a,b)=>a.lotMin-b.
 const activePlan=()=>{const p=S.plans.find(x=>x.active&&x.current);if(!p)return null;const v=p.versions[p.current];return{id:p.id,name:p.name,version:p.current,...v}};
 /* ---------- state / router ---------- */
 let D=null,dirty=false,errs=[],okMsg='',busy=false,DN='',LE=null,PE=null;
-const NAV=[['#/','📊','Manager Panel','لوحة المدير'],['#/new','➕','New Inspection','فحص جديد'],['#/archive','🗂','Inspection Archive','أرشيف الفحوصات'],['#/charts','🥧','Pie Charts','الرسوم الدائرية'],['#/monthly','📅','Monthly Quality Report','تقرير الجودة الشهري'],['#/library','📚','Defect Library','مكتبة العيوب'],['#/reports','📄','Reports','التقارير'],['#/aql','🛠','AQL Plans','خطط AQL'],['#/settings','⚙️','General Settings','الإعدادات العامة']];
+const NAV=[['#/','📊','Manager Panel','لوحة المدير'],['#/new','➕','New Inspection','فحص جديد'],['#/archive','🗂','Inspection Archive','أرشيف الفحوصات'],['#/charts','🥧','Pie Charts','الرسوم الدائرية'],['#/monthly','📅','Monthly Quality Report','تقرير الجودة الشهري'],['#/compare','⚖️','Customer vs Factory Report','مقارنة تقرير العميل بالمصنع'],['#/library','📚','Defect Library','مكتبة العيوب'],['#/reports','📄','Reports','التقارير'],['#/aql','🛠','AQL Plans','خطط AQL'],['#/settings','⚙️','General Settings','الإعدادات العامة']];
 let ROUTE=(location.hash&&location.hash.startsWith('#/'))?location.hash:'#/';
 function go(x){if(x===ROUTE)return;
   if(dirty&&!confirm(L('You have unsaved changes. Leave without saving?','لديك تغييرات غير محفوظة. المغادرة دون حفظ؟')))return;
   dirty=false;ROUTE=x;try{history.replaceState(null,'',x)}catch(e){}route();scrollTo(0,0)}
 document.addEventListener('click',e=>{const a=e.target.closest&&e.target.closest('a[href^="#/"]');if(a){e.preventDefault();go(a.getAttribute('href'))}});
 function newIns(){return{id:insId(),createdAt:Date.now(),status:'draft',orderNo:'',customer:'',model:'',color:'',garmentType:'jacket',orderQty:'',lotSize:'',sampleSize:'',date:nowLocal(),notes:'',comment:'',poCustomer:'',item:'',style:'',salesOrder:'',actualQty:'',packingPct:'',startCode:'',endCode:'',rows:[],props:{},secs:{},defs:[],itemPhotos:[],defPhotos:[],measOn:false,meas:{},measSamples:'',measSizes:'',createdBy:S.me?S.me.id:'',inspectorName:S.me?S.me.name:'',result:null,decisionNote:'',aql:null,history:[]}}
-const MGRNAV=['#/','#/aql','#/settings','#/monthly'],isMgr=()=>!!(S.me&&S.me.role==='manager'),mine=i=>!!S.me&&(i.createdBy===S.me.id||i.inspectorName===S.me.name);
+const MGRNAV=['#/','#/aql','#/settings','#/monthly','#/compare'],isMgr=()=>!!(S.me&&S.me.role==='manager'),mine=i=>!!S.me&&(i.createdBy===S.me.id||i.inspectorName===S.me.name);
 async function route(){const parts=ROUTE.split('/');const a=parts[1]||'',b=parts.slice(2).join('/');
-  if(S.me&&!isMgr()&&['','aql','settings'].includes(a)){ROUTE='#/new';return route()}
+  if(S.me&&!isMgr()&&['','aql','settings','compare'].includes(a)){ROUTE='#/new';return route()}
   if(a==='new'){D=newIns();dirty=false;errs=[];okMsg=''}
   else if(a==='i'){const f=S.ins.find(i=>i.id===b);D=f&&(isMgr()||mine(f))?structuredClone(f):null;if(D&&D.garmentType==='both')D.garmentType='suit';dirty=false;errs=[];okMsg='';DN=''}
   render()}
@@ -104,7 +104,24 @@ const fld=(label,get,set,attrs)=>h('label',{},label,h('input',Object.assign({},a
 function compress(file,max=1280){return new Promise((res,rej)=>{const u=URL.createObjectURL(file),im=new Image();im.onload=()=>{const r=Math.min(1,max/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.round(im.width*r);c.height=Math.round(im.height*r);const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(u);res(c.toDataURL('image/jpeg',.8))};im.onerror=()=>rej(new Error('img'));im.src=u})}
 function pickOne(cb){const i=document.createElement('input');i.type='file';i.accept='image/*';i.onchange=async()=>{const f=i.files[0];if(!f)return;try{cb(await compress(f,500))}catch(e){alert(L('Could not read image.','تعذرت قراءة الصورة.'))}};i.click()}
 function photoStampDate(d,fmt){const p=n=>String(n).padStart(2,'0');if(fmt==='us')return `${p(d.getMonth()+1)}/${p(d.getDate())}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;if(fmt==='iso')return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`}
-function stampPhoto(data){const cfg=S.settings||{};if(cfg.photoStampEnabled===false)return data;return new Promise((resolve,reject)=>{const im=new Image();im.onload=()=>{try{const c=document.createElement('canvas');c.width=im.naturalWidth;c.height=im.naturalHeight;const x=c.getContext('2d');x.drawImage(im,0,0);const scale=Math.max(1,Math.min(c.width,c.height)/720),pad=Math.round(12*scale),font=Math.max(13,Math.round(Math.min(c.width,c.height)*.027));const lines=['AQL INSPECTION',photoStampDate(new Date(),cfg.photoStampFormat||'eu')];if(cfg.photoStampInspector!==false&&(S.me?.name||S.settings?.inspectorName))lines.push(`${L('Inspector','المفتش')}: ${S.me?.name||S.settings.inspectorName}`);if(cfg.photoStampOrder!==false&&D?.orderNo)lines.push(`${L('Order','الطلبية')}: ${D.orderNo}`);x.font=`600 ${font}px Arial`;const lineH=Math.round(font*1.42),w=Math.max(...lines.map(t=>x.measureText(t).width))+pad*2,h=lineH*lines.length+pad*1.5;const pos=cfg.photoStampPosition||'br';const left=pos.endsWith('l')?pad:c.width-w-pad,top=pos.startsWith('t')?pad:c.height-h-pad;x.fillStyle='rgba(0,0,0,.68)';x.fillRect(left,top,w,h);x.fillStyle='#fff';x.textBaseline='top';lines.forEach((t,i)=>x.fillText(t,left+pad,top+pad*.65+i*lineH));resolve(c.toDataURL('image/jpeg',.9))}catch(e){reject(e)}};im.onerror=()=>reject(new Error('stamp'));im.src=data})}
+/* The stamp is still burned into the picture, but its text and the pixels it covers are also kept inside the JPEG file (invisible COM segment).
+   That lets crop/rotate take the stamp off, change the picture, and draw the SAME stamp again — so cropping never cuts the stamp. */
+const STAMP_TAG='AQLSTAMP1:';
+function jpegSetMeta(url,meta){try{const enc=new TextEncoder().encode(STAMP_TAG+JSON.stringify(meta));if(enc.length>65000)return url;const bin=atob(url.slice(url.indexOf(',')+1)),n=bin.length;
+  if(bin.charCodeAt(0)!==0xFF||bin.charCodeAt(1)!==0xD8)return url;const out=new Uint8Array(n+enc.length+4),len=enc.length+2;out[0]=0xFF;out[1]=0xD8;out[2]=0xFF;out[3]=0xFE;out[4]=len>>8;out[5]=len&255;out.set(enc,6);
+  for(let k=2;k<n;k++)out[6+enc.length+k-2]=bin.charCodeAt(k);let b='';for(let k=0;k<out.length;k+=0x8000)b+=String.fromCharCode.apply(null,out.subarray(k,k+0x8000));return 'data:image/jpeg;base64,'+btoa(b)}catch(e){return url}}
+function jpegGetMeta(url){try{if(typeof url!=='string'||!/^data:image\/jpe?g;base64,/i.test(url))return null;const i=url.indexOf(',')+1,bin=atob(url.slice(i,i+4*Math.ceil(70000/3))),b=Uint8Array.from(bin,ch=>ch.charCodeAt(0));let p=2;
+  while(p+4<=b.length&&b[p]===0xFF){const m=b[p+1];if(m===0xDA)break;const len=(b[p+2]<<8)|b[p+3];if(m===0xFE){const t=new TextDecoder().decode(b.subarray(p+4,p+2+len));if(t.startsWith(STAMP_TAG))return JSON.parse(t.slice(STAMP_TAG.length))}p+=2+len}return null}catch(e){return null}}
+function drawStamp(c,lines,pos){const x=c.getContext('2d');x.setTransform(1,0,0,1,0,0);const scale=Math.max(1,Math.min(c.width,c.height)/720),pad=Math.round(12*scale),font=Math.max(13,Math.round(Math.min(c.width,c.height)*.027));x.font=`600 ${font}px Arial`;
+  const lineH=Math.round(font*1.42),w=Math.ceil(Math.max(...lines.map(t=>x.measureText(t).width))+pad*2),hh=Math.ceil(lineH*lines.length+pad*1.5),left=Math.round(pos.endsWith('l')?pad:c.width-w-pad),top=Math.round(pos.startsWith('t')?pad:c.height-hh-pad);
+  const pc=document.createElement('canvas');pc.width=w;pc.height=hh;pc.getContext('2d').drawImage(c,left,top,w,hh,0,0,w,hh);
+  x.fillStyle='rgba(0,0,0,.68)';x.fillRect(left,top,w,hh);x.fillStyle='#fff';x.textBaseline='top';lines.forEach((t,i)=>x.fillText(t,left+pad,top+pad*.65+i*lineH));
+  return{rect:{x:left,y:top,w,h:hh},patch:pc.toDataURL('image/jpeg',.9)}}
+const stampedUrl=(c,lines,pos)=>{const r=drawStamp(c,lines,pos);return jpegSetMeta(c.toDataURL('image/jpeg',.9),{v:1,lines,pos,W:c.width,H:c.height,rect:r.rect,patch:r.patch})};
+function unstampCanvas(c,meta){return new Promise(res=>{const im=new Image();im.onload=()=>{c.getContext('2d').drawImage(im,meta.rect.x,meta.rect.y);res(c)};im.onerror=()=>res(c);im.src=meta.patch})}
+function stampPhoto(data){const cfg=S.settings||{};if(cfg.photoStampEnabled===false)return data;return new Promise((resolve,reject)=>{const im=new Image();im.onload=()=>{try{const c=document.createElement('canvas');c.width=im.naturalWidth;c.height=im.naturalHeight;c.getContext('2d').drawImage(im,0,0);
+  const lines=['AQL INSPECTION',photoStampDate(new Date(),cfg.photoStampFormat||'eu')];if(cfg.photoStampInspector!==false&&(S.me?.name||S.settings?.inspectorName))lines.push(`${L('Inspector','المفتش')}: ${S.me?.name||S.settings.inspectorName}`);if(cfg.photoStampOrder!==false&&D?.orderNo)lines.push(`${L('Order','الطلبية')}: ${D.orderNo}`);
+  resolve(stampedUrl(c,lines,cfg.photoStampPosition||'br'))}catch(e){reject(e)}};im.onerror=()=>reject(new Error('stamp'));im.src=data})}
 function pickPhotos(cam,add){const i=document.createElement('input');i.type='file';i.accept='image/*';if(cam)i.capture='environment';i.multiple=!cam;
   i.onchange=async()=>{for(const f of i.files){if(!f.type.startsWith('image/')){alert(L('Only images are allowed.','يُسمح بالصور فقط.'));continue}
     if(f.size>20*1024*1024){alert(L('Image larger than 20 MB.','الصورة أكبر من 20 ميجابايت.'));continue}
@@ -119,11 +136,11 @@ function render(){document.documentElement.lang=S.lang;document.documentElement.
   const curNav=NAV.find(n=>n[0]===(a==='#/i'?'#/archive':a==='#/report'?'#/reports':a))||NAV[0];
   const sw=h('button',{class:'btn ghost s',onClick:()=>{S.lang=S.lang==='en'?'ar':'en';LS.set('lang',S.lang);render()}},S.lang==='en'?'العربية':'English');
   const link=n=>h('a',{href:n[0],class:n===curNav?'on':''},h('span',{},n[1]),' ',L(n[2],n[3]));
-  const name=S.settings.platformName,fac=S.settings.factoryName;
-  const v=({'':vPanel,new:vIns,i:vIns,archive:()=>vList(false),reports:()=>vList(true),charts:vCharts,monthly:vMonthly,library:vLib,aql:vAql,settings:vSettings,report:vReport})[hash.split('/')[1]||'']||vDash;
+  const name='MEYAR',fac=S.settings.factoryName;
+  const v=({'':vPanel,new:vIns,i:vIns,archive:()=>vList(false),reports:()=>vList(true),charts:vCharts,monthly:vMonthly,compare:vCompare,library:vLib,aql:vAql,settings:vSettings,report:vReport})[hash.split('/')[1]||'']||vDash;
   $('#app').replaceChildren(h('div',{class:'shell'},
-    h('aside',{class:'side'},h('div',{class:'brand'},h('b',{},name),h('small',{},fac)),navs.map(link),h('div',{style:'margin-top:auto;display:grid;gap:8px'},h('small',{style:'color:#8fa6bb;padding:0 8px'},S.me.name+' · '+(isMgr()?L('Manager','مدير'):L('Inspector','مفتش'))),sw,outBtn)),
-    h('div',{class:'main'},h('header',{class:'top'},h('button',{class:'menu-toggle',type:'button','aria-label':'Open navigation',onClick:()=>{const m=$('#top-menu');if(m)m.classList.toggle('open')}},'☰'),h('h1',{},L(curNav[2],curNav[3])),h('span',{id:'autosave-status',class:'autosave-status'},dirty?L('Unsaved changes','تغييرات غير محفوظة'):L('Saved','تم الحفظ')),h('span',{style:'display:flex;gap:6px'},themeButton(),sw,outBtn)),h('nav',{id:'top-menu',class:'top-menu'},navs.map(link)),h('main',{id:'view'},v()))));
+    h('aside',{class:'side'},h('div',{class:'brand'},h('div',{class:'brand-wordmark',dir:'ltr'},h('img',{src:'./icons/meyar-192.png',alt:'M'}),h('b',{},'EYAR')),h('small',{},fac)),navs.map(link),h('div',{style:'margin-top:auto;display:grid;gap:8px'},themeButton(),h('small',{style:'color:#8fa6bb;padding:0 8px'},S.me.name+' · '+(isMgr()?L('Manager','مدير'):L('Inspector','مفتش'))),sw,outBtn)),
+    h('div',{class:'main'},h('header',{class:'top'},h('button',{class:'menu-toggle',type:'button','aria-label':'Open navigation',onClick:()=>{const m=$('#top-menu');if(m)m.classList.toggle('open')}},'☰'),h('div',{class:'top-brand',dir:'ltr'},h('img',{src:'./icons/meyar-192.png',alt:'M'}),h('span',{},'EYAR')),h('h1',{},L(curNav[2],curNav[3])),h('span',{id:'autosave-status',class:'autosave-status'},dirty?L('Unsaved changes','تغييرات غير محفوظة'):L('Saved','تم الحفظ')),h('span',{style:'display:flex;gap:6px'},sw,outBtn)),h('nav',{id:'top-menu',class:'top-menu'},[...navs.map(link),h('div',{class:'menu-theme'},themeButton())]),h('main',{id:'view'},v()))));
   scrollTo(0,y)}
 /* ---------- dashboard ---------- */
 function vDash(){const done=S.ins.filter(i=>['approved','rejected'].includes(i.status));const c=s=>S.ins.filter(i=>s.includes(i.status)).length;const defs=done.flatMap(i=>i.defs||[]);const sum=k=>defs.reduce((a,d)=>a+num(d[k]),0);
@@ -169,6 +186,39 @@ function pieCard(title,items,note){
   return h('div',{class:'card pie-card'},h('h3',{},title),note?h('p',{class:'hint'},note):null,
     h('div',{class:'pie-wrap'},h('div',{class:'pie',style:`background:conic-gradient(${stops.join(',')})`},h('span',{class:'pie-total'},String(tot))),
       h('ul',{class:'pie-leg'},data.map(x=>h('li',{},h('i',{style:'background:'+x.c}),h('span',{},x.label),h('b',{},x.value+' · '+Math.round(x.value/tot*100)+'%'))))))}
+/* ---------- pie charts → A4 PDF with the factory logo and name (added 18 Nov 2026) ---------- */
+function chartsPieSvg(items,size){const data=items.filter(x=>x.value>0),tot=data.reduce((a,x)=>a+x.value,0),R=size/2,ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg');
+  svg.setAttribute('width',size);svg.setAttribute('height',size);svg.setAttribute('viewBox',`0 0 ${size} ${size}`);svg.style.flex='0 0 auto';
+  const add=(tag,at)=>{const e=document.createElementNS(ns,tag);for(const k in at)e.setAttribute(k,at[k]);svg.append(e);return e},P=a=>`${(R+R*Math.cos(a)).toFixed(2)} ${(R+R*Math.sin(a)).toFixed(2)}`;let a0=-Math.PI/2;
+  data.forEach((x,k)=>{const c=x.color||PIE_COLORS[k%PIE_COLORS.length],a1=a0+x.value/tot*2*Math.PI;
+    if(data.length===1)add('circle',{cx:R,cy:R,r:R,fill:c});else add('path',{d:`M${R} ${R} L${P(a0)} A${R} ${R} 0 ${a1-a0>Math.PI?1:0} 1 ${P(a1)} Z`,fill:c});a0=a1});
+  add('circle',{cx:R,cy:R,r:R*.5,fill:'#ffffff'});const t=add('text',{x:R,y:R+size*.06,'text-anchor':'middle','font-size':size*.18,'font-weight':'800',fill:'#1f2937'});t.textContent=String(tot);return svg}
+function chartsCard(s){const data=s.i.filter(x=>x.value>0),tot=data.reduce((a,x)=>a+x.value,0);
+  return h('div',{style:'border:1px solid #d7dee7;border-radius:6px;padding:8px 9px;min-height:200px'},h('div',{style:'font-weight:700;font-size:11px;color:#1f4e79'},s.t),s.n?h('div',{style:'font-size:8px;color:#64748b;margin-top:1px'},s.n):null,
+    tot?h('div',{style:'display:flex;gap:9px;align-items:center;margin-top:8px'},chartsPieSvg(s.i,108),
+      h('div',{style:'flex:1;min-width:0;display:grid;gap:3px'},data.map((x,k)=>h('div',{style:'display:flex;align-items:center;gap:5px;font-size:8.5px;line-height:1.25'},h('i',{style:`width:9px;height:9px;border-radius:2px;flex:0 0 auto;background:${x.color||PIE_COLORS[k%PIE_COLORS.length]}`}),h('span',{style:'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'},x.label),h('b',{style:'white-space:nowrap'},`${x.value} · ${Math.round(x.value/tot*100)}%`)))))
+    :h('p',{style:'font-size:9px;color:#64748b;margin:12px 0'},L('No data for the selected filters.','لا توجد بيانات للفلاتر المحددة.')))}
+async function chartsMakePdf(last,fdesc){
+  if(!window.jspdf||!window.html2canvas)throw new Error('PDF library missing');
+  const pdf=new window.jspdf.jsPDF({unit:'mm',format:'a4',orientation:'portrait',compress:true}),stage=h('div',{class:'stage',style:'position:fixed;left:-12000px;top:0;width:794px'});document.body.append(stage);
+  const dir=S.lang==='ar'?'rtl':'ltr',pages=[];let page,grid;
+  const room=()=>{const top=page.getBoundingClientRect().top;let m=0;[...page.children].forEach(c=>{m=Math.max(m,c.getBoundingClientRect().bottom-top)});return 1123-46-44-m};
+  const newPage=first=>{page=h('div',{class:'rpage cmp-page',dir});stage.append(page);pages.push(page);page.append(cmpLogo());
+    if(first){page.append(h('div',{class:'rtitle',style:'font-size:17px;margin:0 0 3px'},L('PIE CHARTS REPORT','تقرير الرسوم الدائرية')),h('div',{style:'font-size:11px;color:#475569;margin-bottom:5px'},`${S.settings.factoryName||''} · ${new Date().toLocaleDateString(S.lang==='ar'?'ar-EG':'en-GB')}`),
+      h('div',{style:'font-size:9px;color:#475569;margin-bottom:8px'},fdesc),
+      h('div',{style:'display:grid;grid-template-columns:repeat(5,1fr);gap:7px;margin-bottom:10px'},last.metrics.map(([l,v])=>h('div',{style:'border:1px solid #d7dee7;border-radius:6px;padding:7px 8px;min-height:44px'},h('div',{style:'font-size:8.5px;color:#64748b'},l),h('b',{style:'font-size:18px;color:#1f4e79'},String(v))))))}
+    else page.append(h('div',{class:'cmp-run'},L('Pie charts report — continued','تقرير الرسوم الدائرية — تابع')));
+    grid=h('div',{style:'display:grid;grid-template-columns:1fr 1fr;gap:9px'});page.append(grid)};
+  try{try{await document.fonts.load("700 12px CalibriX");await document.fonts.ready}catch(e){}
+    newPage(true);last.sets.forEach(s=>{const c=chartsCard(s);grid.append(c);if(room()<0){grid.removeChild(c);newPage(false);grid.append(c)}});
+    pages.forEach((p,k)=>p.append(h('div',{class:'cmp-foot'},h('span',{},'Quality Department · قسم الجودة'),h('span',{},S.settings.factoryName||''),h('span',{},`Page ${k+1} / ${pages.length}`))));
+    await new Promise(r=>setTimeout(r,100));
+    for(let k=0;k<pages.length;k++){const c=await window.html2canvas(pages[k],{scale:2,backgroundColor:'#ffffff',useCORS:true,logging:false});if(k)pdf.addPage();pdf.addImage(c.toDataURL('image/jpeg',.93),'JPEG',0,0,210,297,undefined,'FAST')}}
+  finally{stage.remove()}
+  return pdf.output('blob')}
+async function chartsExport(btn,last,fdesc){const t=btn.textContent;btn.disabled=true;btn.textContent=L('Preparing…','جارٍ التجهيز…');
+  try{const d=new Date(),p=n=>String(n).padStart(2,'0');cmpSaveBlob(await chartsMakePdf(last,fdesc()),`Pie-Charts-${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}.pdf`)}
+  catch(e){alert(L('Export failed: ','فشل التصدير: ')+(e&&e.message||e))}btn.disabled=false;btn.textContent=t}
 function vCharts(){
   const F={from:'',to:'',cu:'',mo:'',g:'',rd:'',ty:'',sev:'',basis:'pieces',meas:'reports'};const out=h('div',{class:'stack'});
   const MEAS=()=>[['reports',L('Reports','التقارير')],['defects',L('Defects','العيوب')],['accepted',L('Accepted','المقبولة')],['rejected',L('Rejected','المرفوضة')]];
@@ -178,7 +228,9 @@ function vCharts(){
   const top=(m,n)=>{const e=[...m.entries()].sort((a,b)=>b[1]-a[1]);const head=e.slice(0,n).map(([label,value])=>({label,value})),rest=e.slice(n).reduce((a,x)=>a+x[1],0);if(rest>0)head.push({label:L('Other','أخرى'),value:rest,color:'#94a3b8'});return head};
   const timeSlices=(m,n)=>{const keys=[...m.keys()].sort(),keep=keys.slice(-n),old=keys.slice(0,-n).reduce((a,k)=>a+m.get(k),0);const r=keep.map(k=>({key:k,value:m.get(k)}));if(old>0)r.unshift({key:'',value:old,color:'#94a3b8',older:true});return r};
   const pad=n=>String(n).padStart(2,'0');
+  let last={sets:[],metrics:[]};const pc=(t,i,n)=>{last.sets.push({t,i,n});return pieCard(t,i,n)};
   const fill=()=>{
+    last={sets:[],metrics:[]};
     const rows=S.ins.filter(i=>['approved','rejected'].includes(i.status)&&(isMgr()||mine(i))&&(!F.from||dOf(i)>=F.from)&&(!F.to||dOf(i)<=F.to)&&(!F.cu||i.customer===F.cu)&&(!F.mo||i.model===F.mo)&&(!F.g||i.garmentType===F.g||(F.g==='suit'&&i.garmentType==='both'))&&(!F.rd||rndMatch(rnd(i),F.rd))&&(!F.ty||i.inspType===F.ty)&&(!F.sev||(i.defs||[]).some(d=>d.severity===F.sev)));
     const defs=rows.flatMap(i=>(i.defs||[]).filter(d=>!F.sev||d.severity===F.sev));
     const sum=k=>defs.reduce((a,d)=>a+num(d[k]),0);
@@ -192,15 +244,18 @@ function vCharts(){
     const byDef=new Map();defs.forEach(d=>{const k=defName(d)||'?';byDef.set(k,(byDef.get(k)||0)+num(d[F.basis]))});
     const basisTxt=F.basis==='pieces'?L('Counted by affected pieces','العدّ حسب القطع المتأثرة'):L('Counted by occurrences','العدّ حسب مرات الحدوث');
     out.replaceChildren(
-      h('div',{class:'grid'},[[L('Reports','التقارير'),rows.length],[L('Accepted','المقبولة'),acc],[L('Rejected','المرفوضة'),rej],[L('Defect occurrences','مرات حدوث العيوب'),sum('occurrences')],[L('Affected pieces','القطع المتأثرة'),sum('pieces')]].map(([l,v])=>h('div',{class:'card metric'},h('span',{},l),h('b',{},v)))),
+      h('div',{class:'grid'},(last.metrics=[[L('Reports','التقارير'),rows.length],[L('Accepted','المقبولة'),acc],[L('Rejected','المرفوضة'),rej],[L('Defect occurrences','مرات حدوث العيوب'),sum('occurrences')],[L('Affected pieces','القطع المتأثرة'),sum('pieces')]]).map(([l,v])=>h('div',{class:'card metric'},h('span',{},l),h('b',{},v)))),
       h('p',{class:'hint'},L('Source: approved and rejected inspections. Occurrences and affected pieces are separate measures and are never added together.','المصدر: الفحوصات المعتمدة والمرفوضة. مرات الحدوث والقطع المتأثرة مقياسان منفصلان ولا يُجمعان.')),
       h('div',{class:'two'},
-        pieCard(L('Accepted vs Rejected','القبول والرفض'),[{label:L('Accepted','مقبول'),value:acc,color:'#16a34a'},{label:L('Rejected','مرفوض'),value:rej,color:'#dc2626'}]),
-        pieCard(L('Defects by classification','العيوب حسب التصنيف'),bySev,basisTxt),
-        pieCard(L('Top defects','أكثر العيوب تكراراً'),top(byDef,8),basisTxt),
-        pieCard(L('By customer','حسب العميل')+' — '+ml,top(byCu,8),F.meas==='defects'?basisTxt:null),
-        pieCard(L('Weekly','أسبوعياً')+' — '+ml,timeSlices(byWeek,8).map(x=>({label:x.older?L('Older','أقدم'):L('Week of ','أسبوع ')+fmtDate(x.key),value:x.value,color:x.color})),L('Latest 8 weeks (week starts Monday)','آخر 8 أسابيع (بداية الأسبوع الإثنين)')),
-        pieCard(L('Monthly','شهرياً')+' — '+ml,timeSlices(byMon,12).map(x=>({label:x.older?L('Older','أقدم'):MON[Number(x.key.slice(5))-1]+'-'+x.key.slice(0,4),value:x.value,color:x.color})),L('Latest 12 months','آخر 12 شهراً'))))};
+        pc(L('Accepted vs Rejected','القبول والرفض'),[{label:L('Accepted','مقبول'),value:acc,color:'#16a34a'},{label:L('Rejected','مرفوض'),value:rej,color:'#dc2626'}]),
+        pc(L('Defects by classification','العيوب حسب التصنيف'),bySev,basisTxt),
+        pc(L('Top defects','أكثر العيوب تكراراً'),top(byDef,8),basisTxt),
+        pc(L('By customer','حسب العميل')+' — '+ml,top(byCu,8),F.meas==='defects'?basisTxt:null),
+        pc(L('Weekly','أسبوعياً')+' — '+ml,timeSlices(byWeek,8).map(x=>({label:x.older?L('Older','أقدم'):L('Week of ','أسبوع ')+fmtDate(x.key),value:x.value,color:x.color})),L('Latest 8 weeks (week starts Monday)','آخر 8 أسابيع (بداية الأسبوع الإثنين)')),
+        pc(L('Monthly','شهرياً')+' — '+ml,timeSlices(byMon,12).map(x=>({label:x.older?L('Older','أقدم'):MON[Number(x.key.slice(5))-1]+'-'+x.key.slice(0,4),value:x.value,color:x.color})),L('Latest 12 months','آخر 12 شهراً'))))};
+  const fdesc=()=>{const a=[];if(F.from)a.push(L('From','من')+' '+fmtDate(F.from));if(F.to)a.push(L('To','إلى')+' '+fmtDate(F.to));if(F.cu)a.push(L('Customer','العميل')+': '+F.cu);if(F.mo)a.push(L('Model','الموديل')+': '+F.mo);
+    if(F.g)a.push(L('Garment','القطعة')+': '+gName(F.g));if(F.rd)a.push(L('Inspection No.','عدد الفحص')+': '+optTxt(RND_OPTS(),F.rd));if(F.ty)a.push(L('Inspection Type','نوع الفحص')+': '+optTxt(TYPE_OPTS(),F.ty));
+    if(F.sev)a.push(L('Severity','التصنيف')+': '+L(...sevL[F.sev]));a.push(L('Measure','القياس')+': '+((MEAS().find(x=>x[0]===F.meas)||[])[1]||''));a.push(F.basis==='pieces'?L('Counted by affected pieces','العدّ حسب القطع المتأثرة'):L('Counted by occurrences','العدّ حسب مرات الحدوث'));return a.join(' · ')};
   fill();const set=k=>e=>{F[k]=e.target.value;fill()};
   const sel=(lab,k,opts,all)=>h('label',{},lab,h('select',{value:F[k],onChange:set(k)},all?h('option',{value:''},all):null,opts.map(([v,t])=>h('option',{value:v},t))));
   return h('div',{class:'stack'},h('div',{class:'card filters'},
@@ -212,7 +267,7 @@ function vCharts(){
     sel(L('Inspection Type','نوع الفحص'),'ty',TYPE_OPTS(),L('All','الكل')),
     sel(L('Severity','التصنيف'),'sev',SEV.map(k=>[k,L(...sevL[k])]),L('All','الكل')),
     sel(L('Measure (customer / weekly / monthly)','القياس (عملاء / أسبوعي / شهري)'),'meas',MEAS()),
-    sel(L('Count defects by','عدّ العيوب حسب'),'basis',[['pieces',L('Affected pieces','القطع المتأثرة')],['occurrences',L('Occurrences','مرات الحدوث')]])),out)}
+    sel(L('Count defects by','عدّ العيوب حسب'),'basis',[['pieces',L('Affected pieces','القطع المتأثرة')],['occurrences',L('Occurrences','مرات الحدوث')]]),h('button',{type:'button',class:'btn p',onClick:e=>chartsExport(e.currentTarget,last,fdesc)},'⬇ '+L('Export PDF (A4)','تصدير PDF (A4)'))),out)}
 /* ---------- monthly quality report ---------- */
 function monthlyData(month,filters={}){
   const rows=S.ins.filter(i=>['approved','rejected'].includes(i.status)&&String(i.date||'').slice(0,7)===month&&(!filters.customer||i.customer===filters.customer)&&(!filters.model||i.model===filters.model)&&(!filters.inspector||i.inspectorName===filters.inspector));
@@ -265,6 +320,293 @@ function vMonthly(){
   wrap.append(h('div',{class:'card filters'},h('label',{},L('Report month','شهر التقرير'),m),h('label',{},L('Customer','العميل'),customer),h('label',{},L('Model','الموديل'),model),h('label',{},L('Inspector','المفتش'),inspector),download,h('button',{class:'btn',onClick:()=>print()},'🖨 '+L('Print','طباعة'))),h('p',{class:'hint'},L('The report uses completed inspections only and reuses the exact factory logo and factory name configured for the inspection report. Filters are optional.','يعتمد التقرير على الفحوصات المكتملة فقط، ويستخدم نفس لوجو واسم المصنع المضبوطين في تقرير الفحص. الفلاتر اختيارية.')),preview);
   redraw();return wrap;
 }
+
+/* ---------- customer vs factory report comparison (added 17 Nov 2026) ---------- */
+/* Pure logic first (no DOM): reading text from the customer PDF, suggesting field values, and comparing them with the factory report. */
+const CMP_MAX_MB=25,CMP_IMG_PAGES=6,CMP_TXT_PAGES=40;
+const cmpSev=s=>{s=String(s||'').toLowerCase();return /critical|حرج|خطير/.test(s)?'critical':/major|رئيسي|كبير/.test(s)?'major':/minor|ثانوي|بسيط|طفيف/.test(s)?'minor':''};
+const cmpTok=s=>String(s||'').toLowerCase().replace(/[^a-z0-9\u0600-\u06ff]+/g,' ').split(' ').filter(t=>t.length>1).map(t=>t.replace(/([^s])s$/,'$1'));
+function cmpSim(a,b){const ta=[...new Set(cmpTok(a))],tb=[...new Set(cmpTok(b))];if(!ta.length||!tb.length)return 0;
+  const inter=ta.filter(t=>tb.includes(t)).length;let s=2*inter/(ta.length+tb.length);const na=norm(a),nb=norm(b);
+  if(na&&na===nb)s=1;else if(na&&nb&&Math.min(na.length,nb.length)>=5&&(na.includes(nb)||nb.includes(na)))s=Math.max(s,.8);return s}
+const CMP_MON=['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+function cmpYmd(y,m,d){y=+y;m=+m;d=+d;if(!(y>=2000&&y<=2100&&m>=1&&m<=12&&d>=1&&d<=31))return'';const p=n=>String(n).padStart(2,'0');return`${y}-${p(m)}-${p(d)}`}
+function cmpDate(s){s=String(s||'').trim();let m;
+  if((m=s.match(/(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/)))return cmpYmd(m[1],m[2],m[3]);
+  if((m=s.match(/(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})/))){let y=+m[3],a=+m[1],b=+m[2];if(y<100)y+=2000;if(b>12&&a<=12)[a,b]=[b,a];return cmpYmd(y,b,a)}
+  if((m=s.match(/(\d{1,2})(?:st|nd|rd|th)?[\s-]+([A-Za-z]{3,9})\.?[\s,.-]+(\d{4})/))){const k=CMP_MON.indexOf(m[2].slice(0,3).toLowerCase());if(k>=0)return cmpYmd(m[3],k+1,m[1])}
+  if((m=s.match(/([A-Za-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})/))){const k=CMP_MON.indexOf(m[1].slice(0,3).toLowerCase());if(k>=0)return cmpYmd(m[3],k+1,m[2])}
+  return''}
+const cmpNumber=s=>{const m=String(s||'').replace(/,/g,'').match(/\d+(?:\.\d+)?/);return m?m[0]:''};
+const cmpAqlNorm=v=>{const s=String(v??'').trim().toLowerCase();if(!s)return'';if(/not\s*allowed|^n\/?a$|غير\s*مسموح/.test(s))return'0';const n=parseFloat(s.replace(',','.'));return isNaN(n)?s:String(n)};
+/* group pdf.js text items into visual lines; wide gaps become two spaces so table columns can be separated later */
+function cmpLinesFrom(items){const rows=[];
+  items.forEach(it=>{if(!it.str||!it.str.trim())return;const x=it.transform[4],y=it.transform[5],w=it.width||0;let r=rows.find(r=>Math.abs(r.y-y)<3);if(!r){r={y,parts:[]};rows.push(r)}r.parts.push({x,w,s:it.str})});
+  return rows.sort((a,b)=>b.y-a.y).map(r=>{r.parts.sort((a,b)=>a.x-b.x);let out='',end=null;
+    r.parts.forEach(p=>{if(end!==null){const gap=p.x-end;out+=gap>14?'  ':(gap>1&&!/\s$/.test(out)&&!/^\s/.test(p.s)?' ':'')}out+=p.s;end=p.x+p.w});return out.replace(/[ \t]+$/,'')}).filter(Boolean)}
+const CMP_LABELS={
+  orderNo:'p\\.?\\s?o\\.?(?:\\s*(?:no|number|#))?|purchase\\s*order(?:\\s*(?:no|number|#))?|order\\s*(?:no|number|#)|رقم\\s*(?:الطلبية|الأوردر|أمر\\s*الشراء|الطلب)',
+  customer:'customer|buyer|client|brand|العميل|المشتري',
+  model:'style(?:\\s*(?:no|number|#|name))?|model|article|item(?:\\s*(?:no|number|#|name))?|الموديل|الستايل|الصنف',
+  color:'colou?r(?:way)?|ال?لون',
+  orderQty:'order(?:ed)?\\s*(?:qty|quantity)|po\\s*(?:qty|quantity)|total\\s*(?:order\\s*)?(?:qty|quantity)|qty\\s*ordered|كمية\\s*(?:الطلبية|الأوردر|الطلب)',
+  lotSize:'lot\\s*size|batch\\s*size|inspection\\s*lot|shipment\\s*(?:qty|quantity)|shipped\\s*(?:qty|quantity)|packed\\s*(?:qty|quantity)|actual\\s*(?:qty|quantity)|حجم\\s*الدفعة|الكمية\\s*الفعلية',
+  sampleSize:'sample\\s*size|sample\\s*(?:qty|quantity)|(?:qty|quantity)\\s*inspected|inspected\\s*(?:qty|quantity|pcs|pieces)|حجم\\s*العينة',
+  date:'inspection\\s*date|date\\s*of\\s*inspection|insp\\.?\\s*date|تاريخ\\s*الفحص|date|التاريخ',
+  inspector:'inspector(?:\\s*name)?|inspected\\s*by|auditor|qc\\s*(?:name|inspector)|المفتش|اسم\\s*المفتش'};
+function cmpLabelValue(lines,src){const re=new RegExp('(?:^|[\\s|,;(])(?:'+src+')\\s*(?:no\\.?|number|#|name)?\\s*[:：#\\-–=]?\\s*(.*)$','i');
+  for(let k=0;k<lines.length;k++){const m=lines[k].match(re);if(!m)continue;let v=m[1].split(/\s{2,}|\|/)[0].trim();
+    if(!v&&lines[k+1])v=lines[k+1].split(/\s{2,}|\|/)[0].trim();v=v.replace(/^[:：\-–=\s]+|[\s,;]+$/g,'');if(v)return v}return''}
+function cmpPolarity(s){if(/not\s+(approved|accepted)/i.test(s))return'fail';
+  const n=/\b(fail(?:ed)?|reject(?:ed)?)\b|مرفوض|راسب/i.test(s),p=/\b(pass(?:ed)?|accept(?:ed)?|approved)\b|مقبول|ناجح/i.test(s);return n&&!p?'fail':p&&!n?'pass':''}
+function cmpFindResult(lines,text){
+  for(let k=0;k<lines.length;k++){if(/result|decision|conclusion|verdict|disposition|overall|النتيجة|القرار|التقييم/i.test(lines[k])){const r=cmpPolarity(lines[k])||cmpPolarity(lines[k+1]||'');if(r)return r}}
+  const pol=new Set();(text.match(/\b(PASS(?:ED)?|FAIL(?:ED)?|ACCEPTED|REJECTED|APPROVED)\b/g)||[]).forEach(t=>pol.add(/^(FAIL|REJ)/.test(t)?'fail':'pass'));return pol.size===1?[...pol][0]:''}
+function cmpParseDefLine(line){line=String(line||'').trim();if(!line)return null;let name,sev,count;
+  if(line.includes('|')){const p=line.split('|').map(x=>x.trim());name=p[0];sev=cmpSev(p.find((x,i)=>i>0&&cmpSev(x))||'');const nums=p.slice(1).filter(x=>/^\d+$/.test(x));count=nums.length?+nums[nums.length-1]:NaN}
+  else{sev=cmpSev(line);const m=line.match(/(\d+)(?!.*\d)/);count=m?+m[1]:NaN;
+    name=line.replace(/critical|major|minor|حرج|رئيسي|ثانوي/gi,' ').replace(/\d+/g,' ').replace(/[|:;,\-–]+/g,' ').replace(/\s+/g,' ').trim()}
+  if(!name||name.length<2||!(count>=0))return null;return{name,severity:sev,count}}
+const cmpDefText=defs=>defs.map(d=>`${d.name} | ${d.severity||'-'} | ${d.count}`).join('\n');
+const cmpParseDefs=text=>String(text||'').split('\n').map(cmpParseDefLine).filter(Boolean);
+/* best-effort suggestion of the customer's values from the PDF text — always shown to the user for review before comparing */
+function cmpExtract(text){const lines=String(text||'').split('\n').map(x=>x.trim()).filter(Boolean),F={};
+  ['orderNo','customer','model','color','orderQty','lotSize','sampleSize','date','inspector'].forEach(k=>{let v=cmpLabelValue(lines,CMP_LABELS[k]);
+    if(k==='orderNo'){const t=v.match(/[A-Za-z0-9][A-Za-z0-9\-\/_.]{2,}/);v=t?t[0]:''}
+    else if(['orderQty','lotSize','sampleSize'].includes(k))v=cmpNumber(v);else if(k==='date')v=cmpDate(v);F[k]=v||''});
+  F.inspType=/pre[\s-]*final|during\s*production|in[\s-]*line|ما\s*قبل\s*النهائي/i.test(text)?'prefinal':/final|نهائي/i.test(text)?'final':'';
+  SEV.forEach(c=>{const C=c[0].toUpperCase()+c.slice(1);F['aql'+C]='';F['found'+C]='';F['ac'+C]=''});
+  lines.forEach(l=>{if(!/aql/i.test(l))return;SEV.forEach(c=>{const C=c[0].toUpperCase()+c.slice(1);if(F['aql'+C])return;
+    const m=l.match(new RegExp(c+'[^0-9a-z]{0,20}(not\\s*allowed|n\\/?a|\\d+(?:\\.\\d+)?)','i'));if(m)F['aql'+C]=cmpAqlNorm(m[1])})});
+  lines.forEach(l=>{if(/aql|allowed|accept|reject|sample/i.test(l))return;SEV.forEach(c=>{const C=c[0].toUpperCase()+c.slice(1);if(F['found'+C]!=='')return;
+    const m=l.match(new RegExp('^(?:total\\s+|no\\.?\\s*of\\s+)?'+c+'\\b\\s*(?:defects?\\s*|nonconformit\\w*\\s*)?(?:found\\s*)?[:=\\-–]?\\s*(\\d+)(?!\\.\\d)\\b','i'));if(m)F['found'+C]=m[1]})});
+  F.result=cmpFindResult(lines,String(text||''));
+  const defs=lines.filter(l=>cmpSev(l)&&!/total|aql|allowed|accept|reject|sample|result|found\s*:|qty|quantity/i.test(l)).map(cmpParseDefLine).filter(Boolean);
+  return{fields:F,defs}}
+/* ---------- comparison ---------- */
+const CMP_FIELDS=[
+  ['orderNo','text','Order / PO No.','رقم الطلبية / PO'],['customer','text','Customer','العميل'],['model','text','Style / Model','الموديل'],['color','text','Color','اللون'],
+  ['orderQty','num','Order quantity','كمية الطلبية'],['lotSize','num','Lot size','حجم الدفعة'],['sampleSize','num','Sample size','حجم العينة'],
+  ['date','date','Inspection date','تاريخ الفحص'],['inspector','text','Inspector','المفتش'],['inspType','type','Inspection type','نوع الفحص'],
+  ['aqlCritical','aql','AQL – Critical','AQL – حرج'],['aqlMajor','aql','AQL – Major','AQL – رئيسي'],['aqlMinor','aql','AQL – Minor','AQL – ثانوي'],
+  ['acCritical','num','Allowed – Critical','المسموح – حرج'],['acMajor','num','Allowed – Major','المسموح – رئيسي'],['acMinor','num','Allowed – Minor','المسموح – ثانوي'],
+  ['foundCritical','num','Found – Critical','الموجود – حرج'],['foundMajor','num','Found – Major','الموجود – رئيسي'],['foundMinor','num','Found – Minor','الموجود – ثانوي'],
+  ['result','result','Inspection result','نتيجة الفحص']];
+const CMP_RANK={match:3,partial:2,diff:1};
+function cmpStatus(type,f,c){const fe=f===''||f==null,ce=c===''||c==null;if(ce)return'na';if(fe)return'nf';
+  if(type==='result'&&f==='pending')return'pend';
+  if(type==='num')return Number(f)===Number(c)?'match':'diff';
+  if(type==='aql')return cmpAqlNorm(f)===cmpAqlNorm(c)?'match':'diff';
+  if(type==='date'||type==='type'||type==='result')return f===c?'match':'diff';
+  const a=norm(f),b=norm(c);if(a&&a===b)return'match';if(a&&b&&(a.includes(b)||b.includes(a)))return'partial';return'diff'}
+function cmpFacValues(fac){const v={orderNo:fac.orderNo,customer:fac.customer,model:fac.model,color:fac.color,orderQty:fac.orderQty,lotSize:fac.lotSize,sampleSize:fac.sampleSize,date:fac.date,inspector:fac.inspector,inspType:fac.inspType,result:fac.result};
+  SEV.forEach(c=>{const C=c[0].toUpperCase()+c.slice(1);v['aql'+C]=fac.cats[c].aql;v['ac'+C]=fac.cats[c].ac;v['found'+C]=fac.cats[c].found});return v}
+function cmpCompare(fac,cus){const fv=cmpFacValues(fac);
+  return CMP_FIELDS.map(([key,type,en,ar])=>{const f=fv[key],c=cus[key];let st=cmpStatus(type,f,c);
+    if(key==='orderNo'&&fac.poCustomer&&c){const s2=cmpStatus('text',fac.poCustomer,c);if((CMP_RANK[s2]||0)>(CMP_RANK[st]||0))st=s2}
+    return{key,type,en,ar,f,c,st}})}
+function cmpMatchDefects(facDefs,cusDefs){const used=new Set(),rows=[];
+  const sim=(fd,cd)=>Math.max(0,...[fd.nameEn,fd.nameAr].filter(Boolean).map(n=>cmpSim(n,cd.name)));
+  facDefs.forEach(fd=>{let best=-1,bs=0;cusDefs.forEach((cd,k)=>{if(used.has(k))return;const s=sim(fd,cd)+(cd.severity&&cd.severity===fd.severity?.05:0);if(s>bs&&s>=.5){bs=s;best=k}});
+    if(best<0){rows.push({fd,cd:null,st:'facOnly'});return}used.add(best);const cd=cusDefs[best];
+    rows.push({fd,cd,st:(cd.severity&&cd.severity!==fd.severity)?'sev':(Number(cd.count)!==Number(fd.count)?'count':'match')})});
+  cusDefs.forEach((cd,k)=>{if(!used.has(k))rows.push({fd:null,cd,st:'cusOnly'})});return rows}
+function cmpSummary(rows,defRows){const c=s=>rows.filter(r=>r.st===s).length,d=s=>defRows.filter(r=>r.st===s).length;
+  const res=rows.find(r=>r.key==='result'),resultState=!res||!res.c||res.st==='pend'||res.st==='nf'?'none':res.st==='match'?'agree':'differ';
+  return{match:c('match'),partial:c('partial'),diff:c('diff'),na:c('na')+c('nf'),pend:c('pend'),compared:c('match')+c('partial')+c('diff'),
+    defMatch:d('match'),defDiff:d('count')+d('sev'),defFacOnly:d('facOnly'),defCusOnly:d('cusOnly'),resultState}}
+/* snapshot of the factory report at the time of comparison (kept inside the saved comparison even if the inspection is later edited or deleted) */
+function cmpFacDefs(i,basis){const by=new Map();
+  (i.defs||[]).forEach(d=>{const k=(d.defectId||d.id)+'|'+d.severity,l=libOf(d.defectId),en=(l?l.nameEn:d.nameEn)||d.defectId||'',ar=(l?l.nameAr:d.nameAr)||'';let o=by.get(k);
+    if(!o){o={nameEn:en,nameAr:ar,code:d.code||(l&&l.code)||'',severity:d.severity,count:0,occurrences:0,pieces:0};by.set(k,o)}
+    o.occurrences+=num(d.occurrences);o.pieces+=num(d.pieces);o.count+=num(basis==='occurrences'?d.occurrences:d.pieces)});return[...by.values()]}
+function cmpFacSnap(i){const A=i.aql,basis=A?A.countBasis:'pieces',defs=cmpFacDefs(i,basis),tot=c=>defs.filter(d=>d.severity===c).reduce((a,d)=>a+d.count,0),decided=['approved','rejected'].includes(i.status),cats={};
+  SEV.forEach(c=>{cats[c]={aql:A?A.cats[c].aql:'',ac:A?A.cats[c].ac:'',found:A?A.cats[c].found:tot(c)}});
+  return{id:i.id,orderNo:i.orderNo||'',poCustomer:i.poCustomer||'',customer:i.customer||'',model:i.model||i.style||'',color:i.color||'',garmentType:i.garmentType||'',
+    orderQty:String(i.orderQty||''),lotSize:String(i.lotSize||i.actualQty||i.orderQty||''),sampleSize:String((A&&A.sampleSize)||i.sampleSize||''),date:String(i.date||'').slice(0,10),
+    inspector:i.inspectorName||'',inspType:i.inspType||'',round:rnd(i),status:i.status,result:decided?(i.result==='accepted'?'pass':'fail'):'pending',basis,cats,defs}}
+
+/* ---------- reading the customer PDF (pdf.js is loaded only when this page is used) ---------- */
+let CMP_PDFJS=null;
+function cmpPdfjs(){if(window.pdfjsLib)return Promise.resolve(window.pdfjsLib);
+  return CMP_PDFJS||(CMP_PDFJS=new Promise((res,rej)=>{const s=document.createElement('script');s.src='./vendor/pdf.min.js';
+    s.onload=()=>{try{window.pdfjsLib.GlobalWorkerOptions.workerSrc='./vendor/pdf.worker.min.js';res(window.pdfjsLib)}catch(e){CMP_PDFJS=null;rej(e)}};
+    s.onerror=()=>{CMP_PDFJS=null;rej(new Error(L('Could not load the PDF reader. Open the app once while online, then try again.','تعذر تحميل قارئ PDF. افتح التطبيق مرة واحدة بالإنترنت ثم أعد المحاولة.')))};document.head.append(s)}))}
+async function cmpReadPdf(file){
+  if(!(file.type==='application/pdf'||/\.pdf$/i.test(file.name)))throw new Error(L('Please choose a PDF file.','اختر ملف PDF.'));
+  if(file.size>CMP_MAX_MB*1048576)throw new Error(L(`The file is larger than ${CMP_MAX_MB} MB.`,`حجم الملف أكبر من ${CMP_MAX_MB} ميجابايت.`));
+  const head=new Uint8Array(await file.slice(0,5).arrayBuffer());if(String.fromCharCode(...head)!=='%PDF-')throw new Error(L('This file is not a valid PDF.','هذا الملف ليس PDF صالحاً.'));
+  const lib=await cmpPdfjs(),buf=await file.arrayBuffer(),blob=new Blob([buf],{type:'application/pdf'});let doc;
+  try{doc=await lib.getDocument({data:new Uint8Array(buf.slice(0))}).promise}
+  catch(e){throw new Error(e&&e.name==='PasswordException'?L('The PDF is password-protected.','ملف PDF محمي بكلمة مرور.'):L('Could not open this PDF.','تعذر فتح ملف PDF هذا.'))}
+  const lines=[],imgs=[],n=doc.numPages;
+  try{for(let p=1;p<=Math.min(n,CMP_TXT_PAGES);p++){const pg=await doc.getPage(p);lines.push(...cmpLinesFrom((await pg.getTextContent()).items));
+    if(p<=CMP_IMG_PAGES){const vp=pg.getViewport({scale:1.5}),c=document.createElement('canvas');c.width=Math.round(vp.width);c.height=Math.round(vp.height);const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);
+      await pg.render({canvasContext:x,viewport:vp}).promise;imgs.push(c.toDataURL('image/jpeg',.78))}pg.cleanup()}}
+  finally{try{doc.destroy()}catch(e){}}
+  const text=lines.join('\n');return{pages:n,text,imgs,blob,hasText:text.replace(/\s/g,'').length>40}}
+/* ---------- display helpers (screen follows the app language; the PDF is always bilingual) ---------- */
+const CMP_ST={match:['✓ Match','✓ مطابق','cmp-ok'],partial:['≈ Similar','≈ متقارب','cmp-mid'],diff:['✗ Differs','✗ مختلف','cmp-bad'],
+  na:['— Not in customer report','— غير مذكور في تقرير العميل','cmp-na'],nf:['— Not in factory report','— غير مسجّل في تقرير المصنع','cmp-na'],pend:['… Decision pending','… القرار لم يصدر بعد','cmp-na'],
+  facOnly:['✗ Factory only','✗ في المصنع فقط','cmp-bad'],cusOnly:['✗ Customer only','✗ عند العميل فقط','cmp-bad'],count:['✗ Count differs','✗ العدد مختلف','cmp-bad'],sev:['✗ Severity differs','✗ الخطورة مختلفة','cmp-bad']};
+const cmpStat=(st,pdf)=>{const s=CMP_ST[st]||CMP_ST.na;return pdf?h('span',{class:s[2]},s[0],h('div',{dir:'rtl',style:'font-size:8px;font-weight:400;text-align:left'},s[1])):h('span',{class:s[2]},L(s[0],s[1]))};
+const cmpBi=(en,ar)=>h('span',{},en,h('div',{dir:'rtl',style:'font-size:8px;color:#64748b;font-weight:400;text-align:left'},ar));
+function cmpDisp(type,v,pdf){if(v===''||v==null)return'—';
+  if(type==='date'){const[y,m,d]=String(v).split('-');return y&&m&&d?`${d}/${m}/${y}`:String(v)}
+  if(type==='type'){const t=({final:['Final','نهائي'],prefinal:['Pre-Final','ما قبل النهائي']})[v];return t?(pdf?t[0]:L(t[0],t[1])):String(v)}
+  if(type==='result'){const t=({pass:['PASS','مقبول'],fail:['FAIL','مرفوض'],pending:['PENDING','معلّق']})[v];return t?(pdf?t[0]:L(t[0],t[1])):String(v)}
+  if(type==='aql'&&String(v)==='0')return pdf?'0 (Not allowed)':'0';return String(v)}
+const cmpFmtDay=iso=>{const t=new Date(iso);return isNaN(t)?'':t.toLocaleDateString('en-GB')};
+/* ---------- the comparison PDF: A4 pages with the factory logo, paginated by measuring the real layout ---------- */
+const CMP_PH=1123,CMP_PAD=46,CMP_BOTTOM=1123-46-44;
+const cmpLogo=()=>h('div',{class:'rlh',style:'margin-bottom:8px'},h('img',{class:'rlogo',src:S.settings.logo||DEF_LOGO}),h('div',{class:'rlogotxt'},String(S.settings.factoryName||'').toUpperCase().split(/\s+/).filter(Boolean).map(w=>h('div',{},w))));
+async function cmpBuildPages(rec,imgs,stage){
+  const pages=[],sm=rec.summary,fac=rec.fac;let page=null;
+  const room=()=>{const top=page.getBoundingClientRect().top;let m=0;[...page.children].forEach(c=>{m=Math.max(m,c.getBoundingClientRect().bottom-top)});return CMP_BOTTOM-m};
+  const nextPage=cont=>{page=h('div',{class:'rpage cmp-page',dir:'ltr'});stage.append(page);pages.push(page);page.append(cmpLogo());
+    if(cont)page.append(h('div',{class:'cmp-run'},`${rec.id} · Order ${rec.orderNo}${cont==='appendix'?' · Appendix / ملحق':' — continued / تابع'}`));return page};
+  const addTable=(title,cols,items,mkRow,empty)=>{let tbl,tb;
+    const open=cont=>{page.append(h('div',{class:'cmp-h'},title+(cont?' (cont.)':'')));tbl=h('table',{class:'cmp-t'});
+      tbl.append(h('thead',{},h('tr',{},cols.map(c=>h('th',{style:'width:'+c[1]},c[0])))));tb=h('tbody');tbl.append(tb);page.append(tbl)};
+    if(room()<130)nextPage(true);if(!items.length){page.append(h('div',{class:'cmp-h'},title),h('p',{style:'font-size:10px;color:#64748b;margin:2px 0 8px'},empty||'—'));return}
+    open(false);items.forEach(it=>{const tr=mkRow(it);tb.append(tr);if(room()<0){tb.removeChild(tr);nextPage(true);open(true);tb.append(tr)}})};
+  nextPage(false);
+  page.append(h('div',{class:'rtitle',style:'font-size:16px;margin:2px 0 1px'},'CUSTOMER vs FACTORY INSPECTION REPORT COMPARISON'),h('div',{dir:'rtl',style:'font-size:11px;color:#475569;margin-bottom:8px;text-align:left'},'مقارنة تقرير فحص العميل بتقرير فحص المصنع'));
+  const box=(title,rows)=>h('div',{class:'cmp-box'},h('div',{class:'cmp-bt'},title),rows.map(([k,v])=>h('div',{class:'cmp-br'},h('span',{},k),h('b',{},v==null||v===''?'—':v))));
+  const resTxt=fac.result==='pending'?'PENDING':fac.result.toUpperCase();
+  page.append(h('div',{style:'display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px'},
+    box('Comparison / المقارنة',[['Order No.',rec.orderNo],['Customer',rec.customer],['Style / Model',rec.model],['Comparison ID',rec.id],['Date',cmpFmtDay(rec.createdAt)],['Prepared by',rec.createdBy]]),
+    box('Factory report / تقرير المصنع',[['Report ID',fac.id],['Inspection no.',fac.round],['Date',cmpDisp('date',fac.date,true)],['Inspector',fac.inspector],['Type',cmpDisp('type',fac.inspType,true)],['Result',resTxt]]),
+    box('Customer report / تقرير العميل',[['File',rec.customerFile.name.length>26?rec.customerFile.name.slice(0,24)+'…':rec.customerFile.name],['Pages',rec.customerFile.pages],['Date',cmpDisp('date',rec.cus.date,true)],['Inspector',rec.cus.inspector],['Type',cmpDisp('type',rec.cus.inspType,true)],['Result',rec.cus.result?rec.cus.result.toUpperCase():'—']])));
+  const vs=sm.resultState,vcls=vs==='agree'?'cmp-v-ok':vs==='differ'?'cmp-v-bad':'cmp-v-na';
+  page.append(h('div',{class:'cmp-verdict '+vcls},vs==='agree'?'RESULTS AGREE — النتيجتان متطابقتان':vs==='differ'?'RESULTS DIFFER — النتيجتان مختلفتان':'RESULT NOT COMPARED — لم تتم مقارنة النتيجة',
+    h('small',{},` Factory: ${resTxt} · Customer: ${rec.cus.result?rec.cus.result.toUpperCase():'—'}`)));
+  const met=(l,ar,v)=>h('div',{class:'cmp-met'},h('div',{},l,h('div',{dir:'rtl',style:'font-size:8px;text-align:left'},ar)),h('b',{},String(v)));
+  page.append(h('div',{style:'display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin:8px 0'},met('Fields compared','حقول تمت مقارنتها',sm.compared),met('Matching','مطابقة',sm.match+sm.partial),met('Differences','اختلافات',sm.diff+sm.defDiff+sm.defFacOnly+sm.defCusOnly),met('Not available','غير متاحة',sm.na+sm.pend)));
+  addTable('1. Field-by-field comparison / مقارنة الحقول',[['Field / الحقل','27%'],['Factory report / المصنع','24%'],['Customer report / العميل','24%'],['Status / الحالة','25%']],rec.rows,
+    r=>h('tr',{},h('td',{},cmpBi(r.en,r.ar)),h('td',{},cmpDisp(r.type,r.f,true)),h('td',{},cmpDisp(r.type,r.c,true)),h('td',{},cmpStat(r.st,true))));
+  const sevT={critical:'Critical',major:'Major',minor:'Minor'};
+  addTable('2. Defect-by-defect comparison / مقارنة العيوب',[['Factory defect / عيب المصنع','25%'],['Sev.','8%'],['Count','7%'],['Customer defect / عيب العميل','25%'],['Sev.','8%'],['Count','7%'],['Status / الحالة','20%']],rec.defRows,
+    r=>h('tr',{},h('td',{},r.fd?cmpBi(r.fd.nameEn,r.fd.nameAr):'—'),h('td',{},r.fd?sevT[r.fd.severity]||'—':'—'),h('td',{},r.fd?r.fd.count:'—'),h('td',{},r.cd?r.cd.name:'—'),h('td',{},r.cd?sevT[r.cd.severity]||'—':'—'),h('td',{},r.cd?r.cd.count:'—'),h('td',{},cmpStat(r.st,true))),
+    'No defects recorded in either report. / لا توجد عيوب مسجلة في التقريرين.');
+  page.append(h('p',{style:'font-size:8.5px;color:#64748b;margin:4px 0 0'},`Factory counts are by ${fac.basis==='occurrences'?'occurrences':'affected pieces'} (AQL plan basis). Customer counts are as entered from the customer report.`,h('div',{dir:'rtl',style:'text-align:left'},`أعداد المصنع حسب ${fac.basis==='occurrences'?'مرات الحدوث':'القطع المتأثرة'} (أساس خطة AQL)، وأعداد العميل كما أُدخلت من تقرير العميل.`)));
+  if(rec.notes){if(room()<90)nextPage(true);page.append(h('div',{class:'cmp-h'},'3. Notes / ملاحظات'),h('div',{class:'cmp-notes'},rec.notes))}
+  if(!rec.customerFile.hasText)page.append(h('p',{style:'font-size:8.5px;color:#b45309;margin:6px 0 0'},'The customer PDF had no readable text (scan/photo); customer values were entered manually.',h('div',{dir:'rtl',style:'text-align:left'},'ملف العميل بدون نص قابل للقراءة (مسح ضوئي/صورة)، وأُدخلت قيم العميل يدوياً.')));
+  imgs.forEach((src,k)=>{nextPage('appendix');page.append(h('div',{class:'cmp-h'},`Customer report as uploaded — page ${k+1} of ${rec.customerFile.pages}${rec.customerFile.pages>imgs.length&&k===imgs.length-1?` (first ${imgs.length} pages shown; the full file is stored in the order archive)`:''}`));
+    page.append(h('img',{src,style:`display:block;margin:6px auto 0;max-width:100%;max-height:${Math.floor(room())-10}px;object-fit:contain;border:1px solid #cbd5e1`}))});
+  pages.forEach((p,k)=>p.append(h('div',{class:'cmp-foot'},h('span',{},'Quality Department · قسم الجودة'),h('span',{},rec.id),h('span',{},`Page ${k+1} / ${pages.length}`))));
+  return pages}
+async function cmpMakePdf(rec,imgs){
+  if(!window.jspdf||!window.html2canvas)throw new Error('PDF library missing');
+  const pdf=new window.jspdf.jsPDF({unit:'mm',format:'a4',orientation:'portrait',compress:true}),stage=h('div',{class:'stage',style:'position:fixed;left:-12000px;top:0;width:794px'});document.body.append(stage);
+  try{try{await document.fonts.load("700 12px CalibriX");await document.fonts.load("400 12px CalibriX");await document.fonts.ready}catch(e){}
+    const pages=await cmpBuildPages(rec,imgs,stage);await Promise.all([...stage.querySelectorAll('img')].map(im=>im.decode?im.decode().catch(()=>{}):null));await new Promise(r=>setTimeout(r,80));
+    for(let k=0;k<pages.length;k++){const c=await window.html2canvas(pages[k],{scale:2,backgroundColor:'#ffffff',useCORS:true,logging:false});if(k)pdf.addPage();pdf.addImage(c.toDataURL('image/jpeg',.92),'JPEG',0,0,210,297,undefined,'FAST')}}
+  finally{stage.remove()}
+  return pdf.output('blob')}
+
+/* ---------- the page: upload → choose order → review → compare → issue PDF & save to the order archive ---------- */
+const cmpNewId=()=>{const d=new Date(),p=x=>String(x).padStart(2,'0');return`CMP-${String(d.getFullYear()).slice(2)}${p(d.getMonth()+1)}${p(d.getDate())}-${uid().toUpperCase()}`};
+const cmpFileName=rec=>`AQL-Comparison-${String(rec.orderNo||rec.id).replace(/[^\w-]+/g,'_')}-${rec.id}.pdf`;
+const cmpSaveBlob=(blob,name)=>{const a=h('a',{href:URL.createObjectURL(blob),download:name});document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000)};
+async function cmpShareBlob(blob,name){const f=new File([blob],name,{type:'application/pdf'});
+  if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:name});return true}
+  cmpSaveBlob(blob,name);alert(L('Sharing files is not supported here. The PDF was downloaded; attach it manually.','المشاركة المباشرة غير مدعومة هنا. تم تحميل الـPDF؛ أرفقه يدوياً.'));return false}
+function cmpOrders(){const m=new Map();
+  S.ins.filter(i=>['approved','rejected','pending_review'].includes(i.status)&&String(i.orderNo||'').trim()&&(isMgr()||mine(i))).forEach(i=>{const k=String(i.orderNo).trim();if(!m.has(k))m.set(k,[]);m.get(k).push(i)});
+  m.forEach(a=>a.sort((x,y)=>rnd(y)-rnd(x)||(y.createdAt||0)-(x.createdAt||0)));return m}
+const cmpBlankCus=()=>{const o={};CMP_FIELDS.forEach(f=>o[f[0]]='');return o};
+let CMP_KEEP=null; /* keeps the work in progress when the language/theme is switched */
+function cmpTable(rows,screen){const tb=h('tbody');
+  rows.forEach(r=>tb.append(h('tr',{},h('td',{},L(r.en,r.ar)),h('td',{},cmpDisp(r.type,r.f)),h('td',{},cmpDisp(r.type,r.c)),h('td',{},cmpStat(r.st)))));
+  return h('div',{class:'cmp-wrap'},h('table',{class:'cmp-t'},h('thead',{},h('tr',{},[L('Field','الحقل'),L('Factory report','تقرير المصنع'),L('Customer report','تقرير العميل'),L('Status','الحالة')].map(t=>h('th',{},t)))),tb))}
+function cmpDefTable(defRows){const sevT=s=>s?L(...sevL[s]):'—',nm=fd=>S.lang==='ar'?(fd.nameAr||fd.nameEn):fd.nameEn;
+  if(!defRows.length)return h('p',{class:'hint'},L('No defects recorded in either report.','لا توجد عيوب مسجلة في التقريرين.'));
+  const tb=h('tbody');defRows.forEach(r=>tb.append(h('tr',{},h('td',{},r.fd?nm(r.fd):'—'),h('td',{},r.fd?sevT(r.fd.severity):'—'),h('td',{},r.fd?r.fd.count:'—'),h('td',{},r.cd?r.cd.name:'—'),h('td',{},r.cd?sevT(r.cd.severity):'—'),h('td',{},r.cd?r.cd.count:'—'),h('td',{},cmpStat(r.st)))));
+  return h('div',{class:'cmp-wrap'},h('table',{class:'cmp-t'},h('thead',{},h('tr',{},[L('Factory defect','عيب المصنع'),L('Sev.','الخطورة'),L('Count','العدد'),L('Customer defect','عيب العميل'),L('Sev.','الخطورة'),L('Count','العدد'),L('Status','الحالة')].map(t=>h('th',{},t)))),tb))}
+function vCompare(){
+  if(!CMP_KEEP||CMP_KEEP.meId!==(S.me&&S.me.id))CMP_KEEP={meId:S.me&&S.me.id,blob:null,name:'',size:0,read:null,order:'',insId:'',cus:cmpBlankCus(),auto:[],defText:'',notes:'',savedId:null,created:null};
+  const st=CMP_KEEP,orders=cmpOrders(),pre=(()=>{try{return decodeURIComponent(ROUTE.split('/')[2]||'')}catch(e){return''}})();
+  if(pre&&orders.has(pre)&&st.order!==pre){st.order=pre;st.insId='';st.savedId=null;st.created=null}
+  if(st.order&&!orders.has(st.order)){st.order='';st.insId=''}else if(st.order&&!orders.get(st.order).some(i=>i.id===st.insId))st.insId=orders.get(st.order)[0].id;
+  const wrap=h('div',{class:'stack cmp-screen'}),selIns=()=>(orders.get(st.order)||[]).find(i=>i.id===st.insId)||null;
+  const msg=h('p',{class:'hint',style:'overflow-wrap:anywhere'}),setMsg=(en,ar,cls)=>{msg.className=cls||'hint';msg.textContent=en?L(en,ar):''};
+  const run=async(b,fn)=>{const t=b.textContent;b.disabled=true;b.textContent=L('Preparing…','جارٍ التجهيز…');try{await fn()}catch(e){alert(L('Failed: ','فشل: ')+(e&&e.message||e))}b.disabled=false;b.textContent=t};
+  /* 1 — customer PDF */
+  const fileInfo=h('div',{class:'hint'}),input=h('input',{type:'file',accept:'application/pdf,.pdf',style:'display:none',onChange:e=>{const f=e.target.files&&e.target.files[0];e.target.value='';if(f)onFile(f)}});
+  const showFile=()=>{fileInfo.replaceChildren(...(st.blob?[h('b',{},st.name),` · ${(st.size/1048576).toFixed(1)} MB · ${st.read.pages} ${L('page(s)','صفحة')} · `,
+    st.read.hasText?h('span',{class:'cmp-ok'},'✓ '+L('Text was read from the file; values below are suggestions — please review them.','تمت قراءة النص من الملف؛ القيم بالأسفل اقتراحات — راجعها قبل المقارنة.')):h('span',{class:'cmp-bad'},'⚠ '+L('No readable text (scan/photo). Enter the customer values manually; the pages are still attached to the PDF.','لا يوجد نص قابل للقراءة (مسح/صورة). أدخل قيم العميل يدوياً؛ وستُرفق الصفحات في الـPDF.'))]:[L('No file chosen yet.','لم يتم اختيار ملف بعد.')]))};
+  const onFile=f=>run(pickBtn,async()=>{setMsg('Reading the PDF…','جارٍ قراءة الـPDF…');const r=await cmpReadPdf(f);const ex=cmpExtract(r.text);
+    st.blob=r.blob;st.name=f.name;st.size=f.size;st.read=r;st.cus={...cmpBlankCus(),...ex.fields};st.auto=Object.keys(ex.fields).filter(k=>ex.fields[k]!=='');st.defText=cmpDefText(ex.defs);st.savedId=null;st.created=null;
+    setMsg('');showFile();buildReview()});
+  const pickBtn=h('button',{type:'button',class:'btn p',onClick:()=>input.click()},'📎 '+L('Upload customer report (PDF)','رفع تقرير العميل (PDF)'));
+  /* 2 — order + factory report from the archive */
+  const ordIn=h('input',{list:'cmp-orders',placeholder:L('Type or choose an order number','اكتب أو اختر رقم الطلبية'),autocomplete:'off',value:st.order}),
+    ordList=h('datalist',{id:'cmp-orders'},[...orders.keys()].sort().map(k=>h('option',{value:k}))),facBox=h('div'),roundSel=h('select',{onChange:e=>{st.insId=e.target.value;st.savedId=null;st.created=null;showFactory();buildReview()}});
+  const chooseOrder=v=>{const key=[...orders.keys()].find(k=>norm(k)===norm(v))||'';if(key!==st.order){st.order=key;st.insId=key?orders.get(key)[0].id:'';st.savedId=null;st.created=null}if(key&&!st.insId)st.insId=orders.get(key)[0].id;showFactory();buildReview()};
+  ordIn.addEventListener('change',()=>chooseOrder(ordIn.value.trim()));ordIn.addEventListener('input',()=>{if(orders.has(ordIn.value.trim()))chooseOrder(ordIn.value.trim())});
+  const showFactory=()=>{const list=orders.get(st.order)||[],i=selIns();
+    if(!i){facBox.replaceChildren(ordIn.value.trim()?h('p',{class:'warn'},L('No submitted or completed factory report was found for this order number in the archive.','لا يوجد تقرير مصنع مُرسل أو مكتمل بهذا الرقم في الأرشيف.')):h('p',{class:'hint'},L('Choose an order to retrieve the factory report from the archive.','اختر طلبية لاسترجاع تقرير المصنع من الأرشيف.')));return}
+    roundSel.replaceChildren(...list.map(x=>h('option',{value:x.id,selected:x.id===st.insId},`${L('Inspection','فحص')} ${rnd(x)} · ${x.id} · ${stL(x.status)}`)));roundSel.value=st.insId;
+    const f=cmpFacSnap(i);
+    facBox.replaceChildren(h('div',{class:'card item2',style:'display:block'},h('b',{},i.id),' · '+i.orderNo,h('div',{class:'hint'},`${i.customer||''} · ${i.model||''} · ${gName(i.garmentType)} · ${i.inspectorName||''} · ${cmpDisp('date',f.date)}`),
+      h('div',{class:'row wrap',style:'margin:6px 0'},h('span',{class:'badge '+i.status},stL(i.status)),h('span',{class:'badge'},L('Result','النتيجة')+': '+cmpDisp('result',f.result)),h('span',{class:'badge'},L('Inspection no. ','عدد الفحص ')+f.round),h('a',{class:'btn s',href:'#/report/'+i.id},'📄 '+L('Open factory report','فتح تقرير المصنع'))),
+      list.length>1?h('label',{},L('Several inspections exist for this order — choose the one to compare','يوجد أكثر من فحص لهذه الطلبية — اختر الفحص المراد مقارنته'),roundSel):null,
+      i.status==='pending_review'?h('p',{class:'warn'},L('This report is still pending review, so its result is not final.','هذا التقرير ما زال بانتظار المراجعة، لذا نتيجته غير نهائية.')):null))};
+  /* 3 — customer values (suggested from the PDF, editable) */
+  const reviewBox=h('div'),outBox=h('div'),archBox=h('div',{class:'list'});let redrawT=null;
+  const later=()=>{clearTimeout(redrawT);redrawT=setTimeout(recompute,200)};
+  const fieldInput=([key,type,en,ar])=>{const sync=v=>{st.cus[key]=v;st.auto=st.auto.filter(k=>k!==key);lab.classList.remove('cmp-auto');later()};let el;
+    if(type==='date')el=h('input',{type:'date',value:st.cus[key]||'',onInput:e=>sync(e.target.value)});
+    else if(type==='type')el=h('select',{onChange:e=>sync(e.target.value)},[['',L('— not stated —','— غير مذكور —')],['final',L('Final Inspection','فحص نهائي')],['prefinal',L('Pre-Final Inspection','فحص ما قبل النهائي')]].map(([v,t])=>h('option',{value:v,selected:st.cus[key]===v},t)));
+    else if(type==='result')el=h('select',{onChange:e=>sync(e.target.value)},[['',L('— not stated —','— غير مذكور —')],['pass',L('PASS / Accepted','مقبول (PASS)')],['fail',L('FAIL / Rejected','مرفوض (FAIL)')]].map(([v,t])=>h('option',{value:v,selected:st.cus[key]===v},t)));
+    else el=h('input',{value:st.cus[key]||'',inputmode:type==='num'||type==='aql'?'decimal':null,onInput:e=>sync(e.target.value)});
+    const lab=h('label',{class:st.auto.includes(key)?'cmp-auto':''},L(en,ar),el);return lab};
+  const buildReview=()=>{const i=selIns();if(!st.blob||!i){reviewBox.replaceChildren(h('p',{class:'hint'},L('Upload the customer PDF and choose the order to continue.','ارفع PDF العميل واختر الطلبية للمتابعة.')));outBox.replaceChildren();return}
+    const defTa=h('textarea',{rows:6,placeholder:L('Defect name | critical/major/minor | count','اسم العيب | حرج/رئيسي/ثانوي | العدد'),onInput:e=>{st.defText=e.target.value;later()}}),notesTa=h('textarea',{rows:3,placeholder:L('Optional notes to print on the comparison report','ملاحظات اختيارية تُطبع في تقرير المقارنة'),onInput:e=>{st.notes=e.target.value;later()}});
+    defTa.value=st.defText;notesTa.value=st.notes;
+    reviewBox.replaceChildren(h('div',{class:'card form'},h('h3',{},'3. '+L('Customer report values — review and correct','قيم تقرير العميل — راجعها وصحّحها')),
+      h('p',{class:'hint'},L('Highlighted fields were suggested automatically from the PDF text and may be wrong. Leave a field empty if the customer report does not state it.','الحقول المميّزة اقترحها البرنامج من نص الـPDF وقد تكون خاطئة. اترك الحقل فارغاً إذا لم يذكره تقرير العميل.')),
+      h('div',{class:'cmp-grid'},CMP_FIELDS.slice(0,10).map(fieldInput)),h('h4',{},L('AQL limits and defects found','حدود AQL والعيوب الموجودة')),h('div',{class:'cmp-grid'},CMP_FIELDS.slice(10).map(fieldInput)),
+      h('label',{},L('Defects listed in the customer report (one per line: name | severity | count)','العيوب المذكورة في تقرير العميل (سطر لكل عيب: الاسم | الخطورة | العدد)'),defTa),
+      h('label',{},L('Notes','ملاحظات'),notesTa),
+      h('details',{},h('summary',{},L('Text read from the customer PDF','النص المقروء من PDF العميل')),h('pre',{class:'cmp-raw'},st.read.hasText?st.read.text.slice(0,8000):L('(no text layer)','(لا توجد طبقة نصية)')))));
+    recompute()};
+  const buildRec=()=>{const fac=cmpFacSnap(selIns()),cus={...st.cus};CMP_FIELDS.forEach(([k,t])=>{if(t==='num')cus[k]=cmpNumber(cus[k]);else if(t==='aql')cus[k]=cmpAqlNorm(cus[k]);else cus[k]=String(cus[k]||'').trim()});
+    const defs=cmpParseDefs(st.defText),rows=cmpCompare(fac,cus),defRows=cmpMatchDefects(fac.defs,defs);
+    return{id:st.savedId||cmpNewId(),createdAt:st.created||Date.now(),createdBy:(S.me&&S.me.name)||'',createdById:(S.me&&S.me.id)||'',orderNo:fac.orderNo,customer:fac.customer,model:fac.model,inspectionId:fac.id,
+      fac,cus,cusDefs:defs,notes:st.notes.trim(),rows,defRows,summary:cmpSummary(rows,defRows),customerFile:{name:st.name,size:st.size,pages:st.read.pages,hasText:st.read.hasText}}};
+  /* 4 — comparison result and actions */
+  const recompute=()=>{if(!st.blob||!selIns())return;const rec=buildRec(),sm=rec.summary,chip=(t,c)=>h('span',{class:'badge '+(c||'')},t);
+    const rs=sm.resultState,orderRow=rec.rows.find(r=>r.key==='orderNo');
+    const issueBtn=h('button',{type:'button',class:'btn p',onClick:e=>run(e.currentTarget,async()=>{const r=buildRec(),blob=await cmpMakePdf(r,st.read.imgs);
+        await DB.put('comparisons',r);await DB.put('cmpfiles',{id:r.id,customerPdf:st.blob,resultPdf:blob,pageImgs:st.read.imgs});st.savedId=r.id;st.created=r.createdAt;
+        await audit('comparison_saved',r.id,{order:r.orderNo,inspection:r.inspectionId});cmpSaveBlob(blob,cmpFileName(r));setMsg('Comparison saved to the order archive and the PDF was downloaded: '+r.id,'تم حفظ المقارنة في أرشيف الطلبية وتنزيل الـPDF: '+r.id,'ok');await fillArchive();recompute()})},'📄 '+L(st.savedId?'Update PDF & saved comparison':'Issue PDF & save to order archive',st.savedId?'تحديث الـPDF والمقارنة المحفوظة':'إصدار PDF وحفظ في أرشيف الطلبية')),
+      shareBtn=h('button',{type:'button',class:'btn',onClick:e=>run(e.currentTarget,async()=>{const r=buildRec(),blob=await cmpMakePdf(r,st.read.imgs);await DB.put('comparisons',r);await DB.put('cmpfiles',{id:r.id,customerPdf:st.blob,resultPdf:blob,pageImgs:st.read.imgs});st.savedId=r.id;st.created=r.createdAt;
+        await audit('comparison_saved',r.id,{order:r.orderNo,inspection:r.inspectionId});await cmpShareBlob(blob,cmpFileName(r));await fillArchive();recompute()})},'📤 '+L('Save & share (WhatsApp)','حفظ ومشاركة (واتساب)'));
+    outBox.replaceChildren(h('div',{class:'card'},h('h3',{},'4. '+L('Comparison result','نتيجة المقارنة')),
+      orderRow&&orderRow.st==='diff'?h('p',{class:'warn'},'⚠ '+L('The order/PO number in the customer report does not match the selected order. Make sure you chose the right order.','رقم الطلبية/PO في تقرير العميل لا يطابق الطلبية المختارة. تأكد أنك اخترت الطلبية الصحيحة.')):null,
+      h('div',{class:'row wrap'},chip((rs==='agree'?'✓ ':rs==='differ'?'✗ ':'— ')+(rs==='agree'?L('Results agree','النتيجتان متطابقتان'):rs==='differ'?L('Results differ','النتيجتان مختلفتان'):L('Result not compared','لم تتم مقارنة النتيجة')),rs==='agree'?'approved':rs==='differ'?'rejected':''),
+        chip(L('Compared','تمت مقارنتها')+': '+sm.compared),chip('✓ '+(sm.match+sm.partial)),chip('✗ '+sm.diff),chip('— '+(sm.na+sm.pend))),
+      h('h4',{},L('Field-by-field','مقارنة الحقول')),cmpTable(rec.rows),h('h4',{},L('Defect-by-defect','مقارنة العيوب')),cmpDefTable(rec.defRows),
+      h('p',{class:'hint'},L('Factory counts follow the AQL plan basis ('+(rec.fac.basis==='occurrences'?'occurrences':'affected pieces')+'). Defects are matched by name similarity — check the pairs.','أعداد المصنع حسب أساس خطة AQL ('+(rec.fac.basis==='occurrences'?'مرات الحدوث':'القطع المتأثرة')+'). تُطابَق العيوب بتشابه الاسم — راجع الأزواج.')),
+      h('div',{class:'row wrap'},issueBtn,shareBtn,h('button',{type:'button',class:'btn',onClick:()=>{if(confirm(L('Start a new comparison? Unsaved values will be cleared.','بدء مقارنة جديدة؟ ستُمسح القيم غير المحفوظة.'))){CMP_KEEP=null;render()}}},'➕ '+L('New comparison','مقارنة جديدة'))),msg))};
+  /* order archive of saved comparisons */
+  const fillArchive=async()=>{let all=[];try{all=(await DB.all('comparisons')).sort((a,b)=>b.createdAt-a.createdAt)}catch(e){}
+    const list=st.order?all.filter(c=>norm(c.orderNo)===norm(st.order)):all;
+    const items=list.map(c=>h('div',{class:'card item2',style:'display:block'},h('b',{},c.id),' · '+c.orderNo,h('div',{class:'hint'},`${c.customer||''} · ${c.model||''} · ${new Date(c.createdAt).toLocaleString()} · ${c.createdBy||''}`),
+      h('div',{class:'row wrap',style:'margin:6px 0'},h('span',{class:'badge '+(c.summary.resultState==='agree'?'approved':c.summary.resultState==='differ'?'rejected':'')},c.summary.resultState==='agree'?L('Results agree','النتيجتان متطابقتان'):c.summary.resultState==='differ'?L('Results differ','النتيجتان مختلفتان'):L('Result not compared','لم تتم مقارنة النتيجة')),
+        h('span',{class:'badge'},'✗ '+(c.summary.diff+c.summary.defDiff+c.summary.defFacOnly+c.summary.defCusOnly)),h('span',{class:'badge'},c.customerFile.name)),
+      h('div',{class:'row wrap'},
+        h('button',{type:'button',class:'btn s',onClick:e=>run(e.currentTarget,async()=>{const f=await DB.get('cmpfiles',c.id);if(!f||!f.resultPdf)throw new Error(L('PDF not found.','لم يُعثر على الـPDF.'));cmpSaveBlob(f.resultPdf,cmpFileName(c))})},'⬇ '+L('Comparison PDF','PDF المقارنة')),
+        h('button',{type:'button',class:'btn s',onClick:e=>run(e.currentTarget,async()=>{const f=await DB.get('cmpfiles',c.id);if(!f||!f.resultPdf)throw new Error(L('PDF not found.','لم يُعثر على الـPDF.'));await cmpShareBlob(f.resultPdf,cmpFileName(c))})},'📤 '+L('Share','مشاركة')),
+        h('button',{type:'button',class:'btn s',onClick:e=>run(e.currentTarget,async()=>{const f=await DB.get('cmpfiles',c.id);if(!f||!f.customerPdf)throw new Error(L('File not found.','لم يُعثر على الملف.'));cmpSaveBlob(f.customerPdf,c.customerFile.name||('customer-'+c.id+'.pdf'))})},'📎 '+L('Customer PDF','PDF العميل')),
+        h('button',{type:'button',class:'btn s d',onClick:async()=>{if(!confirm(L('Delete comparison '+c.id+'? This cannot be undone.','حذف المقارنة '+c.id+'؟ لا يمكن التراجع.')))return;await DB.del('comparisons',c.id);await DB.del('cmpfiles',c.id);await audit('comparison_deleted',c.id,{order:c.orderNo});if(st.savedId===c.id){st.savedId=null;st.created=null}await fillArchive();recompute()}},'🗑 '+L('Delete','حذف')))));
+    archBox.replaceChildren(h('div',{class:'card'},h('h3',{},'🗂 '+L(st.order?'Saved comparisons for order '+st.order:'Saved comparisons (all orders)','المقارنات المحفوظة'+(st.order?' للطلبية '+st.order:' (كل الطلبيات)'))),
+      items.length?h('div',{class:'list'},items):h('p',{class:'hint'},L('No saved comparisons yet.','لا توجد مقارنات محفوظة بعد.'))))};
+  wrap.append(h('div',{class:'card form'},h('h3',{},'1. '+L('Customer inspection report (PDF)','تقرير فحص العميل (PDF)')),h('p',{class:'hint'},L('Choose the PDF from your phone (Files, Drive, WhatsApp downloads…).','اختر ملف الـPDF من الموبايل (الملفات، درايف، تحميلات واتساب…).')),input,h('div',{class:'row wrap'},pickBtn),fileInfo),
+    h('div',{class:'card form'},h('h3',{},'2. '+L('Order number — factory report from the archive','رقم الطلبية — تقرير المصنع من الأرشيف')),ordIn,ordList,facBox),reviewBox,outBox,archBox);
+  showFile();showFactory();buildReview();fillArchive();return wrap}
 
 /* ---------- defect library ---------- */
 const blankDef=()=>({code:'',nameEn:'',nameAr:'',descEn:'',descAr:'',severity:'minor',garments:[...SINGLE],active:true,photos:[]});
@@ -513,7 +855,7 @@ function vSettings(){const s=S.settings;SINGLE.forEach(g=>{s[g]=s[g]||[]});const
         h('label',{class:'chk'},h('input',{type:'checkbox',checked:s.photoStampInspector!==false,onChange:e=>s.photoStampInspector=e.target.checked}),L('Show inspector name','إظهار اسم المفتش')),
         h('label',{class:'chk'},h('input',{type:'checkbox',checked:s.photoStampOrder!==false,onChange:e=>s.photoStampOrder=e.target.checked}),L('Show order number','إظهار رقم الطلبية')),
         h('label',{},L('Stamp position','مكان الطابع'),h('select',{value:s.photoStampPosition||'br',onChange:e=>s.photoStampPosition=e.target.value},h('option',{value:'br'},L('Bottom right','أسفل اليمين')),h('option',{value:'bl'},L('Bottom left','أسفل اليسار')),h('option',{value:'tr'},L('Top right','أعلى اليمين')),h('option',{value:'tl'},L('Top left','أعلى اليسار')))),
-        h('p',{class:'hint'},L('The timestamp is applied when a photo is added. Existing photos are not changed. Cropping, rotating and annotations preserve the burned-in stamp.','يُضاف الطابع وقت إضافة الصورة. الصور القديمة لا تتغير. القص والتدوير والتعليق يحافظون على الطابع المحفوظ.'))),
+        h('p',{class:'hint'},L('The timestamp is applied when a photo is added (with its original date and time). For photos added from now on, cropping and rotating keep the stamp complete and upright. Older photos are not changed, and cropping them can cut their stamp.','يُضاف الطابع وقت إضافة الصورة (بتاريخها ووقتها الأصلي). في الصور المضافة من الآن، القص والتدوير يُبقيان الطابع كاملاً وبوضع صحيح. الصور القديمة لا تتغير، وقصّها قد يقص طابعها.'))),
       h('button',{class:'btn p',onClick:async()=>{if(!s.platformName.trim()||!s.factoryName.trim()){msg.textContent=L('Both names are required.','الاسمان مطلوبان.');return}
         if([...s.jacket,...s.trousers].some(d=>!d.en.trim()||!d.ar.trim())){msg.textContent=L('Every department needs both names.','كل قسم يحتاج الاسمين.');return}
         await DB.put('kv',s);await audit('settings_updated','settings');msg.textContent=L('Saved.','تم الحفظ.');render()}},L('Save settings','حفظ الإعدادات')),msg),cloudPanel(),...SINGLE.map(tpl),
@@ -542,7 +884,16 @@ function measHdr(i,ed,dt){const sam=ed?h('input',{value:i.measSamples||'',onInpu
     hbwBox([[L('Item','الصنف'),gName(i.garmentType).toUpperCase()],[L('Style','الستايل'),i.style],[L('Sales order','أمر البيع'),i.salesOrder||i.orderNo]]),
     hbwBox([[L('No.Of Samples Measured','عدد العينات المقاسة'),sam],[L('Number Of Size','عدد المقاسات'),siz],[L('Color','اللون'),i.color]]),
     hbwBox([[L('Date','التاريخ'),fmtDate(i.date)],[L('Order No','رقم الطلبية'),i.orderNo],[L('Inspector','المفتش'),i.inspectorName]]))}
-function measOutOfTolerance(b,r,k){const gi=MG.findIndex((n,g)=>k>=MG.slice(0,g).reduce((a,x)=>a+x,0)&&k<MG.slice(0,g+1).reduce((a,x)=>a+x,0));const base=parseFloat(String(b.heads[gi]||'').replace(',','.')),actual=parseFloat(String(r.c[k]??'').replace(',','.')),plus=Math.abs(parseFloat(String(r.tp||'').replace(',','.'))),minus=Math.abs(parseFloat(String(r.tm||'').replace(',','.')));if(!Number.isFinite(base)||!Number.isFinite(actual)||!Number.isFinite(plus)||!Number.isFinite(minus))return false;return actual>base+plus||actual<base-minus}
+function measOutOfTolerance(b,r,k){const P=v=>parseFloat(String(v??'').replace(',','.')),plus=Math.abs(P(r.tp)),minus=Math.abs(P(r.tm));if(!Number.isFinite(plus)||!Number.isFinite(minus))return false;
+  const raw=String(r.c[k]??'').trim().replace(/\s+/g,'');if(!raw)return false;
+  /* deviation entry: "1+", "0.5-", "+1", "-0.5" (sign before or after the number) */
+  const dm=raw.match(/^([+-]?)(\d+(?:[.,]\d+)?)([+-]?)$/);
+  if(dm&&(dm[1]||dm[3])){const sign=(dm[1]||dm[3])==='-'?-1:1,dev=sign*parseFloat(dm[2].replace(',','.'));return dev>plus||dev<-minus}
+  const gi=MG.findIndex((n,g)=>k>=MG.slice(0,g).reduce((a,x)=>a+x,0)&&k<MG.slice(0,g+1).reduce((a,x)=>a+x,0)),base=P(b.heads[gi]),actual=P(raw);
+  if(!Number.isFinite(actual))return false;
+  /* plain number: an absolute reading when it is near the size value, otherwise an unsigned deviation (treated as plus) */
+  if(Number.isFinite(base)&&Math.abs(actual-base)<=Math.abs(actual))return actual>base+plus||actual<base-minus;
+  return actual>plus}
 function measBlock(b,ed,dt){const cell=(arr,k)=>ed?h('input',{value:arr[k]??'',inputmode:'decimal',onInput:e=>{arr[k]=e.target.value;dt()}}):(arr[k]||'');
   return h('table',{class:'mt'},h('colgroup',{},Array.from({length:18},()=>h('col',{style:'width:5.555%'}))),
     h('tr',{},h('th',{class:'diag'}),h('th',{},'Tol +'),h('th',{},'Tol -'),MG.map((n,g)=>h('th',{colspan:n},cell(b.heads,g)))),
@@ -559,6 +910,48 @@ const TYPE_OPTS=()=>[['final',L('Final Inspection','فحص نهائي')],['prefi
 const optTxt=(opts,v)=>{const o=opts.find(x=>x[0]===String(v||''));return o?o[1]:''};
 const sameOrder=o=>{const k1=norm(o.orderNo),k2=norm(o.poCustomer);return S.ins.filter(x=>x.id!==o.id&&((k1&&norm(x.orderNo)===k1)||(k2&&norm(x.poCustomer)===k2)))};
 function copyFrom(src){['orderNo','customer','poCustomer','model','style','salesOrder','color','orderQty','actualQty'].forEach(k=>{D[k]=src[k]??''});D.garmentType=src.garmentType==='both'?'suit':src.garmentType;D.rows=structuredClone(src.rows||[]);D.prevId=src.id;dirty=true;okMsg='';render()}
+/* ---------- WhatsApp-style crop & rotate screen (added 18 Nov 2026) ----------
+   Drag the corners/edges, move the frame, rotate 90°, pick an aspect ratio, reset. Nothing changes until ✓ is pressed. */
+function photoCropper(srcCv,onDone){
+  const ov=h('div',{class:'cropov'}),box=h('div',{class:'cropbox'}),cv=h('canvas'),bar=h('div',{class:'cropbar'}),sheet=h('div',{class:'cropsheet',style:'display:none'});
+  const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));let rc=srcCv,R={x:0,y:0,w:1,h:1},ratio=null,ratioName='free',drag=null,cw=0,ch=0,dpr=1,D={x:0,y:0,w:1,h:1},changed=false;
+  const kOf=()=>ratio?ratio*rc.height/rc.width:null; /* ratio expressed in normalised units */
+  const layout=()=>{cw=box.clientWidth;ch=box.clientHeight;dpr=window.devicePixelRatio||1;cv.width=Math.round(cw*dpr);cv.height=Math.round(ch*dpr);const pad=24,s=Math.min((cw-2*pad)/rc.width,(ch-2*pad)/rc.height);D={w:rc.width*s,h:rc.height*s,x:0,y:0};D.x=(cw-D.w)/2;D.y=(ch-D.h)/2;draw()};
+  const px=()=>({x:D.x+R.x*D.w,y:D.y+R.y*D.h,w:R.w*D.w,h:R.h*D.h});
+  const draw=()=>{const c=cv.getContext('2d');c.setTransform(dpr,0,0,dpr,0,0);c.clearRect(0,0,cw,ch);c.drawImage(rc,D.x,D.y,D.w,D.h);const r=px();
+    c.fillStyle='rgba(0,0,0,.62)';c.fillRect(D.x,D.y,D.w,r.y-D.y);c.fillRect(D.x,r.y+r.h,D.w,D.y+D.h-r.y-r.h);c.fillRect(D.x,r.y,r.x-D.x,r.h);c.fillRect(r.x+r.w,r.y,D.x+D.w-r.x-r.w,r.h);
+    c.strokeStyle='rgba(255,255,255,.45)';c.lineWidth=1;c.beginPath();for(let k=1;k<3;k++){c.moveTo(r.x+r.w*k/3,r.y);c.lineTo(r.x+r.w*k/3,r.y+r.h);c.moveTo(r.x,r.y+r.h*k/3);c.lineTo(r.x+r.w,r.y+r.h*k/3)}c.stroke();
+    c.strokeStyle='#fff';c.lineWidth=1.5;c.strokeRect(r.x,r.y,r.w,r.h);c.lineWidth=4;c.lineCap='square';const L=Math.min(24,r.w/3,r.h/3);c.beginPath();
+    [[r.x,r.y,1,1],[r.x+r.w,r.y,-1,1],[r.x,r.y+r.h,1,-1],[r.x+r.w,r.y+r.h,-1,-1]].forEach(([x,y,a,b])=>{c.moveTo(x+a*L,y);c.lineTo(x,y);c.lineTo(x,y+b*L)});
+    [[r.x+r.w/2,r.y,1,0],[r.x+r.w/2,r.y+r.h,1,0],[r.x,r.y+r.h/2,0,1],[r.x+r.w,r.y+r.h/2,0,1]].forEach(([x,y,a,b])=>{c.moveTo(x-a*L/2,y-b*L/2);c.lineTo(x+a*L/2,y+b*L/2)});c.stroke()};
+  const hit=(x,y)=>{const r=px(),T=clamp(Math.min(r.w,r.h)/3,14,30),nl=Math.abs(x-r.x)<T,nr=Math.abs(x-r.x-r.w)<T,nt=Math.abs(y-r.y)<T,nb=Math.abs(y-r.y-r.h)<T,ix=x>r.x-T&&x<r.x+r.w+T,iy=y>r.y-T&&y<r.y+r.h+T;
+    if(nl&&nt)return'tl';if(nr&&nt)return'tr';if(nl&&nb)return'bl';if(nr&&nb)return'br';if(nt&&ix)return't';if(nb&&ix)return'b';if(nl&&iy)return'l';if(nr&&iy)return'r';
+    return x>r.x&&x<r.x+r.w&&y>r.y&&y<r.y+r.h?'move':null};
+  const apply=(type,dx,dy)=>{const o=drag.R0,minW=44/D.w,minH=44/D.h,k=kOf();
+    if(type==='move'){R={x:clamp(o.x+dx,0,1-o.w),y:clamp(o.y+dy,0,1-o.h),w:o.w,h:o.h};return}
+    let l=o.x,r=o.x+o.w,t=o.y,b=o.y+o.h;
+    if(type.includes('l'))l=clamp(o.x+dx,0,r-minW);if(type.includes('r'))r=clamp(o.x+o.w+dx,l+minW,1);if(type.includes('t'))t=clamp(o.y+dy,0,b-minH);if(type.includes('b'))b=clamp(o.y+o.h+dy,t+minH,1);
+    let w=r-l,hh=b-t;if(!k){R={x:l,y:t,w,h:hh};return}
+    const hx=/[lr]/.test(type),hy=/[tb]/.test(type);if(hx&&hy){if(w/hh>k)w=hh*k;else hh=w/k}else if(hx)hh=w/k;else w=hh*k;
+    const aw=type.includes('l')?o.x+o.w:type.includes('r')?1-o.x:2*Math.min(o.x+o.w/2,1-o.x-o.w/2),ah=type.includes('t')?o.y+o.h:type.includes('b')?1-o.y:2*Math.min(o.y+o.h/2,1-o.y-o.h/2),sc=Math.min(1,aw/w,ah/hh);w*=sc;hh*=sc;
+    R={x:type.includes('l')?o.x+o.w-w:type.includes('r')?o.x:o.x+(o.w-w)/2,y:type.includes('t')?o.y+o.h-hh:type.includes('b')?o.y:o.y+(o.h-hh)/2,w,h:hh}};
+  const pos=e=>{const q=cv.getBoundingClientRect();return{x:e.clientX-q.left,y:e.clientY-q.top}};
+  cv.addEventListener('pointerdown',e=>{const q=pos(e),type=hit(q.x,q.y);if(!type)return;e.preventDefault();cv.setPointerCapture(e.pointerId);drag={type,sx:q.x,sy:q.y,R0:{...R}}});
+  cv.addEventListener('pointermove',e=>{if(!drag)return;const q=pos(e);apply(drag.type,(q.x-drag.sx)/D.w,(q.y-drag.sy)/D.h);changed=true;draw()});
+  const end=()=>{drag=null};cv.addEventListener('pointerup',end);cv.addEventListener('pointercancel',end);
+  const setRatio=(name,val)=>{ratioName=name;ratio=name==='free'?null:name==='orig'?rc.width/rc.height:val;sheet.style.display='none';const k=kOf();
+    if(k){let w=R.w,hh=R.h;if(w/hh>k)w=hh*k;else hh=w/k;const cx=R.x+R.w/2,cy=R.y+R.h/2;R={x:clamp(cx-w/2,0,1-w),y:clamp(cy-hh/2,0,1-hh),w,h:hh};changed=true}draw();buildBar()};
+  const rotate=()=>{const c=document.createElement('canvas');c.width=rc.height;c.height=rc.width;const q=c.getContext('2d');q.translate(0,c.height);q.rotate(-Math.PI/2);q.drawImage(rc,0,0);rc=c;
+    R={x:R.y,y:1-R.x-R.w,w:R.h,h:R.w};if(ratio)ratio=ratioName==='orig'?rc.width/rc.height:1/ratio;changed=true;layout()};
+  const reset=()=>{rc=srcCv;R={x:0,y:0,w:1,h:1};ratio=null;ratioName='free';changed=false;sheet.style.display='none';layout();buildBar()};
+  const close=()=>{window.removeEventListener('resize',layout);ov.remove()};
+  const done=()=>{if(!changed){close();onDone(null);return}const w=Math.max(1,Math.round(R.w*rc.width)),hh=Math.max(1,Math.round(R.h*rc.height)),out=document.createElement('canvas');out.width=w;out.height=hh;
+    out.getContext('2d').drawImage(rc,Math.round(R.x*rc.width),Math.round(R.y*rc.height),w,hh,0,0,w,hh);close();onDone(out)};
+  const RATIOS=[['free',L('Freeform','حر')],['orig',L('Original','الأصلية')],['1:1',1],['4:3',4/3],['3:4',3/4],['3:2',3/2],['2:3',2/3],['16:9',16/9],['9:16',9/16]];
+  const btn=(label,fn,cls)=>h('button',{type:'button',class:'cropbtn '+(cls||''),onClick:fn},label);
+  const buildBar=()=>{bar.replaceChildren(btn('✕',()=>{close();onDone(null)}),btn('⟲',rotate),btn('▭',()=>{sheet.style.display=sheet.style.display==='none'?'flex':'none'}),btn(L('Reset','إعادة ضبط'),reset,'txt'),btn('✓',done,'ok'))};
+  RATIOS.forEach(([n,v])=>sheet.append(h('button',{type:'button',class:'cropchip'+(ratioName===n?' on':''),onClick:()=>{setRatio(n,v);RATIOS.forEach((_,i)=>sheet.children[i].classList.toggle('on',RATIOS[i][0]===ratioName))}},n==='free'||n==='orig'?v:n)));
+  box.append(cv,sheet);ov.append(box,bar);buildBar();document.body.append(ov);window.addEventListener('resize',layout);layout()}
 function annotatePhoto(obj,onDone){const src=obj.p0||obj.p,im=new Image();
   im.onload=()=>{const W=im.naturalWidth,Hh=im.naturalHeight,lw=Math.max(4,Math.round(W/140));let shapes=structuredClone(obj.ann||[]),tool='c',drag=null;
     const cv=h('canvas',{width:W,height:Hh}),cx=cv.getContext('2d');
@@ -572,8 +965,10 @@ function annotatePhoto(obj,onDone){const src=obj.p0||obj.p,im=new Image();
       if(drag.t==='crop'){const x=Math.min(drag.x1,drag.x2)*W,y=Math.min(drag.y1,drag.y2)*Hh,w=Math.abs(drag.x2-drag.x1)*W,hh=Math.abs(drag.y2-drag.y1)*Hh;if(w>20&&hh>20){const cut=document.createElement('canvas');cut.width=Math.round(w);cut.height=Math.round(hh);cut.getContext('2d').drawImage(cv,x,y,w,hh,0,0,cut.width,cut.height);obj.p=cut.toDataURL('image/jpeg',.9);delete obj.p0;delete obj.ann;ov.remove();annotatePhoto(obj,onDone);return}}else if(dpx<W*.02){if(drag.t==='c'){const rx=.07,ry=.07*W/Hh;shapes.push({t:'c',x1:drag.x1-rx,x2:drag.x1+rx,y1:drag.y1-ry,y2:drag.y1+ry})}}else shapes.push(drag);drag=null;draw()});
     const tb=(l,fn,on)=>h('button',{type:'button',class:'btn'+(on?' on':''),onClick:fn},l);const ov=h('div',{class:'annov'});
     const bar=h('div',{class:'annt'});
-    const rotate=dir=>{const t=document.createElement('canvas');t.width=Hh;t.height=W;const q=t.getContext('2d');q.translate(t.width/2,t.height/2);q.rotate(dir*Math.PI/2);q.drawImage(im,-W/2,-Hh/2);obj.p=t.toDataURL('image/jpeg',.9);delete obj.p0;delete obj.ann;ov.remove();annotatePhoto(obj,onDone)};
-    const render2=()=>{bar.replaceChildren(tb('⭕ '+L('Circle','دائرة'),()=>{tool='c';render2()},tool==='c'),tb('↗ '+L('Arrow','سهم'),()=>{tool='a';render2()},tool==='a'),tb('✂ '+L('Crop','قص'),()=>{tool='crop';render2()},tool==='crop'),tb('↶ '+L('Rotate left','تدوير يسار'),()=>rotate(-1)),tb('↷ '+L('Rotate right','تدوير يمين'),()=>rotate(1)),tb('↩ '+L('Undo','تراجع'),()=>{shapes.pop();draw()}),tb('🗑 '+L('Clear','مسح'),()=>{shapes=[];draw()}),
+    const rotate=async dir=>{const base=document.createElement('canvas');base.width=W;base.height=Hh;base.getContext('2d').drawImage(im,0,0);const m0=jpegGetMeta(src),meta=m0&&m0.W===W&&m0.H===Hh?m0:null;if(meta)await unstampCanvas(base,meta);
+      const t=document.createElement('canvas');t.width=Hh;t.height=W;const q=t.getContext('2d');q.translate(t.width/2,t.height/2);q.rotate(dir*Math.PI/2);q.drawImage(base,-W/2,-Hh/2);obj.p=meta?stampedUrl(t,meta.lines,meta.pos):t.toDataURL('image/jpeg',.9);delete obj.p0;delete obj.ann;ov.remove();annotatePhoto(obj,onDone)};
+    const render2=()=>{bar.replaceChildren(tb('⭕ '+L('Circle','دائرة'),()=>{tool='c';render2()},tool==='c'),tb('↗ '+L('Arrow','سهم'),()=>{tool='a';render2()},tool==='a'),tb('✂ '+L('Crop & rotate','قص وتدوير'),async()=>{draw();const base=document.createElement('canvas');base.width=W;base.height=Hh;base.getContext('2d').drawImage(cv,0,0);const m0=jpegGetMeta(src),meta=m0&&m0.W===W&&m0.H===Hh?m0:null;if(meta)await unstampCanvas(base,meta);
+      photoCropper(base,out=>{if(!out)return;obj.p=meta?stampedUrl(out,meta.lines,meta.pos):out.toDataURL('image/jpeg',.9);delete obj.p0;delete obj.ann;ov.remove();annotatePhoto(obj,onDone)})}),tb('↶ '+L('Rotate left','تدوير يسار'),()=>rotate(-1)),tb('↷ '+L('Rotate right','تدوير يمين'),()=>rotate(1)),tb('↩ '+L('Undo','تراجع'),()=>{shapes.pop();draw()}),tb('🗑 '+L('Clear','مسح'),()=>{shapes=[];draw()}),
       tb(L('Cancel','إلغاء'),()=>ov.remove()),h('button',{type:'button',class:'btn p',onClick:()=>{draw();if(shapes.length){obj.p0=obj.p0||obj.p;obj.p=cv.toDataURL('image/jpeg',.88);obj.ann=shapes}else{if(obj.p0){obj.p=obj.p0;delete obj.p0}delete obj.ann}ov.remove();onDone&&onDone()}},'✔ '+L('Done','تم')))};
     render2();ov.append(h('div',{class:'annc'},cv),bar);document.body.append(ov);draw()};
   im.onerror=()=>alert(L('Could not open the photo.','تعذر فتح الصورة.'));im.src=src}
@@ -887,7 +1282,7 @@ function vReport(){const id=ROUTE.split('/')[2],i=S.ins.find(x=>x.id===id);if(!i
     h('button',{class:'btn p',onClick:e=>run(e.currentTarget,async()=>{dl(await makePdf(i));await audit('report_pdf_downloaded',i.id)})},'⬇ '+L('Download PDF','تحميل PDF')),
     h('button',{class:'btn',onClick:e=>run(e.currentTarget,async()=>{const blob=await makePdf(i);const f=new File([blob],fname,{type:'application/pdf'});
       if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:fname});await audit('report_pdf_shared',i.id)}else{dl(blob);alert(L('Sharing files is not supported here. The PDF was downloaded; attach it in WhatsApp manually.','المشاركة المباشرة غير مدعومة هنا. تم تحميل الـPDF؛ أرفقه يدوياً في واتساب.'))}})},'📤 '+L('Share (WhatsApp)','مشاركة (واتساب)')),
-    h('button',{class:'btn',onClick:e=>run(e.currentTarget,async()=>{dl(await makeXlsx(i),fname.replace(/\.pdf$/,'.xlsx'));await audit('report_xlsx_downloaded',i.id)})},'📊 '+L('Download Excel','تحميل Excel')),h('button',{class:'btn',onClick:()=>print()},'🖨 '+L('Print','طباعة')),(isMgr()&&['approved','rejected'].includes(i.status)?h('button',{class:'btn',onClick:()=>reopenIns(i)},'🔓 '+L('Reopen for correction','إعادة فتح للتصحيح')):null),h('a',{class:'btn',href:'#/i/'+i.id},L('Open record','فتح السجل'))),
+    h('button',{class:'btn',onClick:e=>run(e.currentTarget,async()=>{dl(await makeXlsx(i),fname.replace(/\.pdf$/,'.xlsx'));await audit('report_xlsx_downloaded',i.id)})},'📊 '+L('Download Excel','تحميل Excel')),h('button',{class:'btn',onClick:()=>print()},'🖨 '+L('Print','طباعة')),(isMgr()&&['approved','rejected'].includes(i.status)?h('button',{class:'btn',onClick:()=>reopenIns(i)},'🔓 '+L('Reopen for correction','إعادة فتح للتصحيح')):null),(isMgr()&&i.orderNo?h('a',{class:'btn',href:'#/compare/'+encodeURIComponent(i.orderNo)},'⚖️ '+L('Compare with customer report','مقارنة مع تقرير العميل')):null),h('a',{class:'btn',href:'#/i/'+i.id},L('Open record','فتح السجل'))),
     h('div',{class:'rwrap'},pages))}
 /* ---------- members, sign-in, manager panel (this device only) ---------- */
 const hash53=(str,seed=0)=>{let h1=0xdeadbeef^seed,h2=0x41c6ce57^seed;for(let i=0,ch;i<str.length;i++){ch=str.charCodeAt(i);h1=Math.imul(h1^ch,2654435761);h2=Math.imul(h2^ch,1597334677)}h1=Math.imul(h1^(h1>>>16),2246822507)^Math.imul(h2^(h2>>>13),3266489909);h2=Math.imul(h2^(h2>>>16),2246822507)^Math.imul(h1^(h1>>>13),3266489909);return(4294967296*(2097151&h2)+(h1>>>0)).toString(16)};
@@ -909,7 +1304,7 @@ function vSetup(){const nm=h('input',{placeholder:L('Your full name','اسمك �
 function vLogin(){const act=S.members.filter(m=>m.active),sel=h('select',{},act.map(m=>h('option',{value:m.id},m.name+' — '+(m.role==='manager'?L('Manager','مدير'):L('Inspector','مفتش'))))),pin=h('input',{type:'password',inputmode:'numeric',maxlength:8,placeholder:L('PIN','الرقم السري')}),rem=h('input',{type:'checkbox'}),msg=h('p',{class:'err'});
   const go1=async()=>{const m=S.members.find(x=>x.id===sel.value);if(m&&await verifyPin(m,pin.value)){await audit('sign_in',m.id);await startSession(m,rem.checked)}else msg.textContent=L('Wrong PIN.','الرقم السري غير صحيح.')};
   pin.addEventListener('keydown',e=>{if(e.key==='Enter')go1()});
-  return h('div',{class:'auth-wrap'},h('div',{class:'auth-visual'},h('img',{src:'./images/aql-login-inspector.png',alt:'AQL Inspection quality inspector'})),h('div',{class:'card form auth-card',style:'max-width:460px;width:100%'},h('div',{class:'row',style:'justify-content:space-between;align-items:center'},h('h2',{style:'margin:0'},S.settings.platformName),h('div',{class:'row'},themeButton(),langBtn())),h('p',{class:'hint'},S.settings.factoryName),sel,pin,
+  return h('div',{class:'auth-wrap'},h('div',{class:'auth-visual'},h('img',{src:'./images/aql-login-inspector.png',alt:'AQL Inspection quality inspector'})),h('div',{class:'card form auth-card',style:'max-width:460px;width:100%'},h('div',{class:'row',style:'justify-content:space-between;align-items:center'},h('h2',{style:'margin:0'},'MEYAR'),h('div',{class:'row'},themeButton(),langBtn())),h('p',{class:'hint'},S.settings.factoryName),sel,pin,
     h('label',{class:'chk'},rem,L('Stay signed in on this device','ابقَ مسجلاً على هذا الجهاز')),msg,h('button',{class:'btn p',onClick:go1},L('Sign in','دخول')),
     h('button',{class:'lnk',onClick:async()=>{if(prompt(L('This removes ALL members (inspections are kept). Type RESET to continue:','سيحذف كل الأعضاء (تبقى الفحوصات). اكتب RESET للمتابعة:'))==='RESET'){S.members=[];await saveMembers();signOut()}}},L('Forgot the manager PIN?','نسيت الرقم السري للمدير؟'))))}
 function customerList(){return[...new Set([...(S.lists.customers||[]),...S.ins.map(i=>i.customer)].filter(Boolean))].sort((a,b)=>a.localeCompare(b))}

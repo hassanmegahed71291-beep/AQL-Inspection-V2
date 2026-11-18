@@ -201,3 +201,51 @@ html[data-theme="dark"] .pie-total{background:#121e30}
 .pie-leg li span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pie-leg li b{white-space:nowrap}
 .mt td.meas-out{background:#ef4444!important;color:#fff!important;font-weight:800!important;outline:1px solid #b91c1c}
+
+/* ---------- customer vs factory report comparison ---------- */
+.cmp-ok{color:#15803d;font-weight:700}.cmp-bad{color:#dc2626;font-weight:700}.cmp-mid{color:#b45309;font-weight:700}.cmp-na{color:#64748b}
+.cmp-wrap{overflow-x:auto;margin:6px 0 10px}
+.cmp-t{width:100%;border-collapse:collapse;font-size:12px}
+.cmp-t th{text-align:start;padding:6px 7px;border:1px solid var(--line);background:rgba(31,78,121,.12)}
+.cmp-t td{padding:5px 7px;border:1px solid var(--line);vertical-align:top;overflow-wrap:break-word}
+.cmp-screen .cmp-t{min-width:540px}
+[data-theme="dark"] .cmp-screen .btn:not(.p):not(.d){background:var(--navy2);color:var(--ink)}
+.cmp-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+@media(min-width:900px){.cmp-grid{grid-template-columns:repeat(3,1fr)}}
+.cmp-auto{outline:2px solid #f5a800;outline-offset:2px;border-radius:6px;padding:2px}
+.cmp-raw{white-space:pre-wrap;max-height:240px;overflow:auto;font-size:11px;background:rgba(100,116,139,.12);padding:8px;border-radius:6px}
+/* the PDF pages are always white, so they use fixed colours (independent of dark mode) */
+.rpage.cmp-page .cmp-t{font-size:9.5px;margin:0 0 6px;color:#000}
+.rpage.cmp-page .cmp-t th{background:#eaf1f8;border:1px solid #ccd6e0;color:#1f4e79;padding:4px 5px;font-weight:700}
+.rpage.cmp-page .cmp-t td{border:1px solid #d7dee7;padding:3px 5px;color:#000}
+.cmp-h{font-size:12px;font-weight:700;color:#1f4e79;margin:10px 0 4px}
+.cmp-run{font-size:9px;color:#64748b;margin:0 0 4px}
+.cmp-box{border:1px solid #d7dee7;border-radius:6px;padding:6px 8px}
+.cmp-bt{font-size:9.5px;font-weight:700;color:#1f4e79;margin-bottom:3px}
+.cmp-br{display:flex;justify-content:space-between;gap:6px;font-size:9px;line-height:1.5}.cmp-br span{color:#64748b}.cmp-br b{text-align:right;overflow-wrap:anywhere}
+.cmp-verdict{font-weight:700;font-size:12px;padding:7px 10px;border-radius:6px;border:1.5px solid}
+.cmp-verdict small{font-weight:400;font-size:10px;margin-inline-start:6px}
+.cmp-v-ok{background:#ecfdf3;border-color:#15803d;color:#15803d}.cmp-v-bad{background:#fef2f2;border-color:#dc2626;color:#dc2626}.cmp-v-na{background:#f1f5f9;border-color:#94a3b8;color:#475569}
+.cmp-met{border:1px solid #d7dee7;border-radius:6px;padding:6px 8px;font-size:9px;color:#64748b;min-height:42px}.cmp-met b{font-size:18px;color:#1f4e79;display:block}
+.cmp-notes{font-size:10px;border:1px solid #d7dee7;border-radius:6px;padding:6px 8px;white-space:pre-wrap}
+.cmp-foot{position:absolute;left:44px;right:44px;bottom:22px;border-top:1px solid #cbd5e1;padding-top:6px;font-size:8px;color:#64748b;display:flex;justify-content:space-between}
+
+/* WhatsApp-style crop screen */
+.cropov{position:fixed;inset:0;background:#000;z-index:70;display:grid;grid-template-rows:1fr auto;padding-top:env(safe-area-inset-top)}
+.cropbox{position:relative;min-height:0}.cropbox canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
+.cropbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px calc(12px + env(safe-area-inset-bottom))}
+.cropbtn{min-width:48px;height:48px;border-radius:24px;border:0;background:rgba(255,255,255,.16);color:#fff;font-size:22px;display:grid;place-items:center;cursor:pointer;padding:0}
+.cropbtn.txt{padding:0 16px;font-size:15px}.cropbtn.ok{background:#25d366}
+.cropsheet{position:absolute;left:0;right:0;bottom:0;background:#1f2c34;border-radius:16px 16px 0 0;padding:14px;flex-wrap:wrap;gap:8px;justify-content:center}
+.cropchip{border:1px solid #ffffff55;background:transparent;color:#fff;border-radius:18px;padding:8px 14px;font-size:14px;cursor:pointer}.cropchip.on{background:#25d366;border-color:#25d366}
+
+/* MEYAR brand header */
+.top{position:relative;min-height:60px;padding-left:142px;padding-right:14px}
+.top-brand{position:absolute;left:14px;top:50%;transform:translateY(-50%);display:flex;align-items:center;gap:0;color:#fff;font-size:22px;font-weight:800;letter-spacing:2px;line-height:1}
+.top-brand img{width:31px;height:31px;object-fit:contain;display:block;margin-right:-2px}
+.top h1{display:none}
+.brand-wordmark{display:flex;align-items:center;gap:0;margin-bottom:8px;color:#fff;font-size:21px;font-weight:800;letter-spacing:2px}
+.brand-wordmark img{width:32px;height:32px;object-fit:contain;margin-right:-2px}
+.menu-theme{border-top:1px solid #2b3f5a;margin-top:6px;padding-top:8px}
+.menu-theme .btn{width:100%;justify-content:flex-start}
+@media(max-width:899px){.top{padding-left:125px;min-height:60px}.top-brand{left:12px;font-size:19px}.top-brand img{width:27px;height:27px}.autosave-status{display:none}.top-menu{top:calc(60px + env(safe-area-inset-top))}}
