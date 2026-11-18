@@ -37,7 +37,8 @@ const stL=s=>({draft:L('Draft','مسودة'),in_progress:L('In progress','قيد
 const DB={db:null,
   open(){return new Promise((res,rej)=>{const r=indexedDB.open('aql-inspection',2);r.onupgradeneeded=()=>{['kv','library','plans','inspections','comparisons','cmpfiles'].forEach(s=>{if(!r.result.objectStoreNames.contains(s))r.result.createObjectStore(s,{keyPath:'id'})})};r.onsuccess=()=>{this.db=r.result;res()};r.onerror=()=>rej(r.error)})},
   tx(s,m,f){return new Promise((res,rej)=>{const t=this.db.transaction(s,m);let r;try{r=f(t.objectStore(s))}catch(e){return rej(e)}t.oncomplete=()=>res(r&&r.result);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error)})},
-  all(s){return this.tx(s,'readonly',st=>st.getAll())},get(s,id){return this.tx(s,'readonly',st=>st.get(id))},put(s,o){return this.tx(s,'readwrite',st=>st.put(o))},clear(s){return this.tx(s,'readwrite',st=>st.clear())},del(s,id){return this.tx(s,'readwrite',st=>st.delete(id))}};
+  all(s){return this.tx(s,'readonly',st=>st.getAll())},get(s,id){return this.tx(s,'readonly',st=>st.get(id))},rev:0,own:0,noTomb:false,
+  put(s,o){DB.rev++;return this.tx(s,'readwrite',st=>st.put(o))},clear(s){return this.tx(s,'readwrite',st=>st.clear())},del(s,id){DB.rev++;return this.tx(s,'readwrite',st=>st.delete(id)).then(async r=>{if(!DB.noTomb&&['library','plans','inspections'].includes(s)){try{const m=(await DB.get('kv','syncmeta'))||{id:'syncmeta',ws:'',h:{},s:{},tomb:{},aud:{}};m.tomb=m.tomb||{};m.tomb[s+'/'+id]=Date.now();await DB.put('kv',m)}catch(e){}}return r})}};
 const DEPTS=[['Cutting','القص'],['Front Preparation','تجهيز الأمام'],['Sleeve Preparation','تجهيز الأكمام'],['Lining Preparation','تجهيز البطانة'],['Assembly','التجميع'],['Pressing','الكي'],['Packing','التعبئة']];
 const defSettings=()=>({id:'settings',platformName:'MEYAR',factoryName:'ALPHA OMEGA EGYPT',inspectorName:'',jacket:DEPTS.map(([en,ar])=>({id:'d_'+uid(6),en,ar,active:true})),trousers:[],vest:[],shorts:[],minDefPages:2,minItemPages:0});
 async function loadAll(){S.lib=await DB.all('library');S.plans=await DB.all('plans');const allIns=(await DB.all('inspections')).sort((a,b)=>b.createdAt-a.createdAt),lim=Date.now()-30*864e5,keepIns=[];
@@ -158,8 +159,8 @@ function vList(rep){const F={q:'',st:'',g:'',cu:'',ins:'',rd:'',ty:''};const box
   const fill=()=>{const trash=!rep&&!!F.trash;
     if(tb){tb.textContent=trash?'← '+L('Back to archive','رجوع للأرشيف'):'🗑 '+L('Trash','سلة المحذوفات')+' ('+S.trash.filter(x=>isMgr()||mine(x)).length+')';banner.textContent=trash?L('Items in the trash are deleted permanently after 30 days.','العناصر في السلة تُحذف نهائياً بعد 30 يوماً.'):'';banner.style.display=trash?'':'none';emptyBtn.style.display=trash&&isMgr()&&S.trash.length?'':'none'}
     const rows=(trash?S.trash:S.ins).filter(i=>(isMgr()||mine(i))&&(!F.cu||i.customer===F.cu)&&(!F.ins||i.inspectorName===F.ins)&&(!rep||['approved','rejected','pending_review'].includes(i.status))&&(!F.st||i.status===F.st)&&(!F.rd||rndMatch(rnd(i),F.rd))&&(!F.ty||i.inspType===F.ty)&&(!F.g||i.garmentType===F.g||(F.g==='suit'&&i.garmentType==='both'))&&norm(`${i.id}${i.orderNo}${i.customer}${i.model}${i.color}${i.inspectorName}`).includes(norm(F.q)));
-    const toTrash=async i=>{if(!confirm(L('Move inspection '+i.id+' to the trash? You can restore it within 30 days.','نقل الفحص '+i.id+' إلى سلة المحذوفات؟ يمكنك استعادته خلال 30 يوماً.')))return;try{i.deletedAt=Date.now();i.deletedBy=(S.me&&S.me.name)||'';await DB.put('inspections',i);await audit('inspection_trashed',i.id,{status:i.status,order:i.orderNo});await loadAll();fill()}catch(err){alert(L('Could not delete.','تعذر المسح.'))}};
-    const restore=async i=>{try{delete i.deletedAt;delete i.deletedBy;await DB.put('inspections',i);await audit('inspection_restored',i.id,{});await loadAll();fill()}catch(err){alert(L('Could not restore.','تعذرت الاستعادة.'))}};
+    const toTrash=async i=>{if(!confirm(L('Move inspection '+i.id+' to the trash? You can restore it within 30 days.','نقل الفحص '+i.id+' إلى سلة المحذوفات؟ يمكنك استعادته خلال 30 يوماً.')))return;try{i.deletedAt=Date.now();i.updatedAt=Date.now();i.deletedBy=(S.me&&S.me.name)||'';await DB.put('inspections',i);await audit('inspection_trashed',i.id,{status:i.status,order:i.orderNo});await loadAll();fill()}catch(err){alert(L('Could not delete.','تعذر المسح.'))}};
+    const restore=async i=>{try{delete i.deletedAt;delete i.deletedBy;i.updatedAt=Date.now();await DB.put('inspections',i);await audit('inspection_restored',i.id,{});await loadAll();fill()}catch(err){alert(L('Could not restore.','تعذرت الاستعادة.'))}};
     const purge=async i=>{if(!confirm(L('Permanently delete '+i.id+'? This cannot be undone.','حذف '+i.id+' نهائياً؟ لا يمكن التراجع عن ذلك.')))return;try{await DB.del('inspections',i.id);await audit('inspection_deleted',i.id,{status:i.status,order:i.orderNo});await loadAll();fill()}catch(err){alert(L('Could not delete.','تعذر المسح.'))}};
     box.replaceChildren(...(rows.length?rows.map(i=>h('div',{class:'card item'+(rep?'':' arch'),onClick:()=>{if(!trash)go(rep?'#/report/'+i.id:'#/i/'+i.id)}},
       h('div',{},h('b',{},i.id),' · '+i.orderNo,h('div',{class:'hint'},`${i.customer||''} · ${i.model||''} · ${i.garmentType} · ${i.inspectorName||''}`),trash?h('div',{class:'hint'},L('Deleted','حُذف')+' '+new Date(i.deletedAt).toLocaleDateString()+(i.deletedBy?' · '+i.deletedBy:'')):null),
@@ -782,25 +783,43 @@ async function seedPlan(){const p=z14Plan();p.active=!S.plans.some(x=>x.active);
 /* ---------- settings / backup ---------- */
 /* ---------- secure cloud sync (Supabase) ---------- */
 const CLOUD_CFG_KEY='aql-cloud-config-v1';
-let CLOUD_CLIENT=null, CLOUD_BUSY=false;
+const CLOUD_WS_KEY='aql-cloud-workspace-v1', CLOUD_AUTO_KEY='aql-cloud-auto-v1', CLOUD_LASTSYNC_KEY='aql-cloud-lastsync-v1';
+let CLOUD_CLIENT=null, CLOUD_BUSY=false, CLOUD_LAST='', CLOUD_SEEN={ws:'',rev:-1};
 const AQL_SUPABASE_DEFAULTS={url:'https://ayyqopyazqvdoldasqiw.supabase.co',anonKey:'sb_publishable_OhWHv4LTR0NsvYnE_JY0Ug_LpeAJme0'};
 function cloudCfg(){try{return {...AQL_SUPABASE_DEFAULTS,...JSON.parse(localStorage.getItem(CLOUD_CFG_KEY)||'{}')}}catch(e){return {...AQL_SUPABASE_DEFAULTS}}}
 function cloudSaveCfg(c){localStorage.setItem(CLOUD_CFG_KEY,JSON.stringify(c));CLOUD_CLIENT=null}
 function cloudClient(){const c=cloudCfg();if(!c.url||!c.anonKey)throw new Error(L('Enter the Supabase project URL and anon/public key first.','أدخل رابط مشروع Supabase ومفتاح anon/public أولاً.'));if(!window.supabase||!window.supabase.createClient)throw new Error(L('Cloud library could not load. Connect to the internet and refresh.','تعذر تحميل مكتبة السحابة. اتصل بالإنترنت وأعد فتح الصفحة.'));if(!CLOUD_CLIENT)CLOUD_CLIENT=window.supabase.createClient(c.url,c.anonKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});return CLOUD_CLIENT}
 function cloudPanel(){
- const cfg=cloudCfg(), url=h('input',{type:'url',placeholder:'https://xxxxxxxx.supabase.co',value:cfg.url||''}), key=h('input',{type:'password',placeholder:L('Supabase anon/public key','مفتاح anon/public من Supabase'),value:cfg.anonKey||'',autocomplete:'off'}), email=h('input',{type:'email',placeholder:L('Cloud account email','البريد الإلكتروني للحساب السحابي'),autocomplete:'email'}), pass=h('input',{type:'password',placeholder:L('Cloud account password','كلمة مرور الحساب السحابي'),autocomplete:'current-password'}), workspace=h('input',{placeholder:L('Workspace name (for manager)','اسم مساحة العمل (للمدير)'),value:(S.settings&&S.settings.factoryName)||'AQL Workspace'}), code=h('input',{placeholder:L('Join code from the manager','رمز الانضمام من مدير المنصة'),autocomplete:'off'}), msg=h('p',{class:'hint',style:'overflow-wrap:anywhere'});
- const status=()=>{const c=cloudCfg();const ws=localStorage.getItem('aql-cloud-workspace-v1');return L('Configuration: ','الإعداد: ')+(c.url&&c.anonKey?L('saved','محفوظ'):L('not set','غير مضبوط'))+' · '+L('Workspace: ','مساحة العمل: ')+(ws||L('not joined','لم يتم الانضمام'))};
- const note=(en,ar)=>{msg.textContent=L(en,ar)};
- const btn=(label,fn)=>h('button',{class:'btn s',type:'button',onClick:async()=>{if(CLOUD_BUSY)return;CLOUD_BUSY=true;msg.textContent=L('Working…','جارٍ التنفيذ…');try{await fn()}catch(e){note('Error: '+(e.message||String(e)),'خطأ: '+(e.message||String(e)))}finally{CLOUD_BUSY=false}}},label);
+ const cfg=cloudCfg(), url=h('input',{type:'url',placeholder:'https://xxxxxxxx.supabase.co',value:cfg.url||''}), key=h('input',{type:'password',placeholder:L('Supabase anon/public key','مفتاح anon/public من Supabase'),value:cfg.anonKey||'',autocomplete:'off'}), email=h('input',{type:'email',placeholder:L('Cloud account email','البريد الإلكتروني للحساب السحابي'),autocomplete:'email'}), pass=h('input',{type:'password',placeholder:L('Cloud account password','كلمة مرور الحساب السحابي'),autocomplete:'current-password'}), workspace=h('input',{placeholder:L('Workspace name (for manager)','اسم مساحة العمل (للمدير)'),value:(S.settings&&S.settings.factoryName)||'AQL Workspace'}), code=h('input',{placeholder:L('Join code from the manager (12 characters)','رمز الانضمام من المدير (12 خانة)'),autocomplete:'off'}), msg=h('p',{class:'hint',style:'overflow-wrap:anywhere;font-weight:600;min-height:1.4em'},CLOUD_LAST), membersBox=h('div',{class:'stack'});
+ const note=(en,ar)=>{CLOUD_LAST=L(en,ar);msg.textContent=CLOUD_LAST};
  const row=(...children)=>h('div',{class:'row wrap'},...children);
+ const lastSync=()=>{const t=+localStorage.getItem(CLOUD_LASTSYNC_KEY)||0;return t?new Date(t).toLocaleString():L('never','لم تتم بعد')};
+ const status=()=>{const c=cloudCfg();let host='';try{host=new URL(c.url).host}catch(e){}const ws=localStorage.getItem(CLOUD_WS_KEY);return L('Project: ','المشروع: ')+(host||'-')+' · '+L('Workspace: ','مساحة العمل: ')+(ws||L('not joined','لم يتم الانضمام'))+' · '+L('Last sync: ','آخر مزامنة: ')+lastSync()};
+ const btn=(label,fn)=>h('button',{class:'btn s',type:'button',onClick:async()=>{if(CLOUD_BUSY){note('Another cloud operation is running. Try again in a moment.','عملية سحابة أخرى قيد التنفيذ. حاول بعد لحظات.');return}CLOUD_BUSY=true;note('Working…','جارٍ التنفيذ…');try{await fn()}catch(e){const m=(e&&e.message)||String(e);note('Error: '+m,'خطأ: '+m)}finally{CLOUD_BUSY=false}}},label);
+ const needWs=()=>{const ws=localStorage.getItem(CLOUD_WS_KEY);if(!ws)throw new Error(L('Create or join a workspace first.','أنشئ مساحة عمل أو انضم إليها أولاً.'));return ws};
+ const loadMembers=async()=>{const ws=needWs(),c=cloudClient();const r=await c.rpc('aql_list_members',{p_workspace:ws});if(r.error)throw r.error;
+   membersBox.replaceChildren(...(r.data||[]).map(m=>{const own=m.role==='owner';const sel=h('select',{},h('option',{value:'manager',selected:m.role==='manager'},L('Manager','مدير')),h('option',{value:'inspector',selected:m.role==='inspector'},L('Inspector','مفتش')));
+     return h('div',{class:'row wrap'},h('b',{style:'flex:1;overflow-wrap:anywhere;font-size:14px'},m.email+(own?' ('+L('owner','المالك')+')':'')),own?null:sel,
+       own?null:h('button',{class:'btn s',type:'button',onClick:async()=>{try{const x=await c.rpc('aql_set_member_role',{p_workspace:ws,p_user:m.user_id,p_role:sel.value});if(x.error)throw x.error;note('Role updated.','تم تحديث الصلاحية.')}catch(e){note('Error: '+e.message,'خطأ: '+e.message)}}},L('Save role','حفظ'))
+       ,own?null:h('button',{class:'btn s d',type:'button',onClick:async()=>{if(!confirm(L('Remove this member from the cloud workspace?','إزالة هذا العضو من مساحة العمل السحابية؟')))return;try{const x=await c.rpc('aql_remove_member',{p_workspace:ws,p_user:m.user_id});if(x.error)throw x.error;note('Member removed.','تمت إزالة العضو.');await loadMembers()}catch(e){note('Error: '+e.message,'خطأ: '+e.message)}}},'🗑'))}));
+   note('Members loaded: '+(r.data||[]).length,'تم تحميل الأعضاء: '+(r.data||[]).length)};
+ const sum=s=>['Done. Uploaded '+s.up+', downloaded '+s.down+', deleted from cloud '+s.del+', removed locally '+s.delLocal+', conflicts resolved '+s.conf+', skipped '+s.skip+'.'+(s.err?' First error: '+s.err:''),'اكتملت المزامنة. رفع '+s.up+'، تنزيل '+s.down+'، حذف من السحابة '+s.del+'، حذف محلي '+s.delLocal+'، تعارضات تمت معالجتها '+s.conf+'، متخطى '+s.skip+'.'+(s.err?' أول خطأ: '+s.err:'')];
+ const done=async s=>{if(s.changed)await loadAll();const m=sum(s);note(m[0],m[1]);render()};
  return h('div',{class:'card form'},h('h3',{},'☁️ '+L('Cloud database & multi-device sync','قاعدة البيانات السحابية والمزامنة بين الأجهزة')),
-   h('p',{class:'hint'},L('This connects the current app to your own Supabase project. It does not upload anything until you press Sync. Keep the anon/public key only; never paste a service_role key here.','هذا يربط المنصة بمشروع Supabase الخاص بك. لن تُرفع البيانات إلا عند الضغط على مزامنة. استخدم مفتاح anon/public فقط ولا تضع مفتاح service_role هنا.')),
-   url,key,row(btn(L('Save cloud settings','حفظ إعدادات السحابة'),async()=>{if(!url.value.trim()||!key.value.trim())throw new Error(L('Both fields are required.','يجب إدخال الرابط والمفتاح.'));let u;try{u=new URL(url.value.trim())}catch(e){throw new Error(L('Project URL is invalid.','رابط المشروع غير صحيح.'))}if(u.protocol!=='https:')throw new Error(L('Use an HTTPS project URL.','يجب استخدام رابط HTTPS.'));cloudSaveCfg({url:url.value.trim().replace(/\/$/,''),anonKey:key.value.trim()});note('Cloud settings saved on this device.','تم حفظ إعدادات السحابة على هذا الجهاز.');render()}),btn(L('Test connection','اختبار الاتصال'),async()=>{const c=cloudClient();const r=await c.auth.getSession();if(r.error)throw r.error;const q=await c.from('aql_cloud_records').select('record_id',{head:true,count:'exact'}).limit(1);if(q.error)throw q.error;note('Connection successful. '+(r.data.session?'Signed in.':'Not signed in yet.'),'الاتصال ناجح. '+(r.data.session?'تم تسجيل الدخول.':'لم يتم تسجيل الدخول بعد.'))})),
-   h('div',{class:'divider'}),h('h4',{},L('Cloud account','حساب السحابة')),email,pass,row(btn(L('Create account','إنشاء حساب'),async()=>{if(!email.value||pass.value.length<8)throw new Error(L('Enter email and a password of at least 8 characters.','أدخل البريد وكلمة مرور لا تقل عن 8 أحرف.'));const r=await cloudClient().auth.signUp({email:email.value.trim(),password:pass.value});if(r.error)throw r.error;note('Account request submitted. If email confirmation is enabled, confirm the email before signing in.','تم إرسال طلب إنشاء الحساب. إذا كان تأكيد البريد مفعلاً، أكد البريد قبل تسجيل الدخول.')}),btn(L('Sign in','تسجيل الدخول'),async()=>{const r=await cloudClient().auth.signInWithPassword({email:email.value.trim(),password:pass.value});if(r.error)throw r.error;note('Signed in to cloud account.','تم تسجيل الدخول للحساب السحابي.');render()}),btn(L('Sign out cloud','خروج من السحابة'),async()=>{const r=await cloudClient().auth.signOut();if(r.error)throw r.error;note('Signed out. Local data was not deleted.','تم تسجيل الخروج. لم تُحذف البيانات المحلية.');render()})),
-   h('div',{class:'divider'}),h('h4',{},L('Shared workspace','مساحة العمل المشتركة')),workspace,code,row(btn(L('Create workspace','إنشاء مساحة عمل'),async()=>{if(!workspace.value.trim())throw new Error(L('Enter a workspace name.','أدخل اسم مساحة العمل.'));const r=await cloudClient().rpc('aql_create_workspace',{p_name:workspace.value.trim()});if(r.error)throw r.error;const x=Array.isArray(r.data)?r.data[0]:r.data;if(!x||!x.workspace_id)throw new Error(L('Workspace was created but no ID was returned. Check the SQL setup.','تم إنشاء مساحة العمل لكن لم يصل المعرّف. راجع إعداد SQL.'));localStorage.setItem('aql-cloud-workspace-v1',x.workspace_id);note(L('Workspace created. Share this join code with invited users: ','تم إنشاء مساحة العمل. شارك رمز الانضمام مع المستخدمين المصرح لهم: ')+(x.join_code||''));render()}),btn(L('Join workspace','الانضمام لمساحة'),async()=>{if(!code.value.trim())throw new Error(L('Enter the join code.','أدخل رمز الانضمام.'));const r=await cloudClient().rpc('aql_join_workspace',{p_code:code.value.trim()});if(r.error)throw r.error;localStorage.setItem('aql-cloud-workspace-v1',r.data);note('Joined workspace.','تم الانضمام لمساحة العمل.');render()})),
-   h('p',{class:'hint'},status()),row(btn(L('Upload local data to cloud','رفع البيانات المحلية للسحابة'),async()=>{await cloudPush();note('Upload completed. Local data was kept.','اكتمل الرفع. تم الاحتفاظ بالبيانات المحلية.')}),btn(L('Download cloud data to this device','تنزيل بيانات السحابة لهذا الجهاز'),async()=>{if(!confirm(L('Cloud records will be merged into this device. Existing local records with the same IDs may be overwritten. Continue?','سيتم دمج سجلات السحابة في هذا الجهاز. قد تُستبدل السجلات المحلية التي لها نفس المعرّف. هل تريد المتابعة؟')))return;await cloudPull();await loadAll();render();note('Download completed.','اكتمل التنزيل.')}),btn(L('Sync both ways','مزامنة في الاتجاهين'),async()=>{await cloudPush();await cloudPull();await loadAll();render();note('Two-way sync completed.','اكتملت المزامنة في الاتجاهين.')})),
-   h('p',{class:'warn'},L('Important: first create the tables/functions using the accompanying SQL file in Supabase. Use one trusted workspace per factory/team. This first cloud stage syncs structured records; do not treat it as fully production-ready until photo storage, automatic live sync, and user-role migration have been tested.','مهم: أنشئ الجداول والدوال أولاً باستخدام ملف SQL المرفق في Supabase. استخدم مساحة عمل موثوقة لكل مصنع/فريق. هذه المرحلة تزامن السجلات المنظمة؛ لا تعتبرها جاهزة للإنتاج بالكامل قبل اختبار تخزين الصور والمزامنة الفورية ونقل صلاحيات المستخدمين.')));
+   h('p',{class:'hint'},L('This connects the app to your own Supabase project. Keep the anon/public key only; never paste a service_role key here.','هذا يربط المنصة بمشروع Supabase الخاص بك. استخدم مفتاح anon/public فقط ولا تضع مفتاح service_role هنا.')),
+   url,key,row(btn(L('Save cloud settings','حفظ إعدادات السحابة'),async()=>{if(!url.value.trim()||!key.value.trim())throw new Error(L('Both fields are required.','يجب إدخال الرابط والمفتاح.'));let u;try{u=new URL(url.value.trim())}catch(e){throw new Error(L('Project URL is invalid.','رابط المشروع غير صحيح.'))}if(u.protocol!=='https:')throw new Error(L('Use an HTTPS project URL.','يجب استخدام رابط HTTPS.'));cloudSaveCfg({url:url.value.trim().replace(/\/$/,''),anonKey:key.value.trim()});note('Cloud settings saved on this device.','تم حفظ إعدادات السحابة على هذا الجهاز.')}),btn(L('Test connection','اختبار الاتصال'),async()=>{const c=cloudClient();const r=await c.auth.getSession();if(r.error)throw r.error;const q=await c.from('aql_cloud_records').select('record_id',{head:true,count:'exact'}).limit(1);if(q.error)throw q.error;note('Connection successful. '+(r.data.session?'Signed in.':'Not signed in yet.'),'الاتصال ناجح. '+(r.data.session?'تم تسجيل الدخول.':'لم يتم تسجيل الدخول بعد.'))})),
+   h('div',{class:'divider'}),h('h4',{},L('Cloud account','حساب السحابة')),email,pass,row(btn(L('Create account','إنشاء حساب'),async()=>{if(!email.value||pass.value.length<8)throw new Error(L('Enter email and a password of at least 8 characters.','أدخل البريد وكلمة مرور لا تقل عن 8 أحرف.'));const r=await cloudClient().auth.signUp({email:email.value.trim(),password:pass.value});if(r.error)throw r.error;note('Account request submitted. If email confirmation is enabled, confirm the email before signing in.','تم إرسال طلب إنشاء الحساب. إذا كان تأكيد البريد مفعلاً، أكد البريد قبل تسجيل الدخول.')}),btn(L('Sign in','تسجيل الدخول'),async()=>{const r=await cloudClient().auth.signInWithPassword({email:email.value.trim(),password:pass.value});if(r.error)throw r.error;note('Signed in to cloud account.','تم تسجيل الدخول للحساب السحابي.')}),btn(L('Sign out cloud','خروج من السحابة'),async()=>{const r=await cloudClient().auth.signOut();if(r.error)throw r.error;note('Signed out. Local data was not deleted.','تم تسجيل الخروج. لم تُحذف البيانات المحلية.')})),
+   h('div',{class:'divider'}),h('h4',{},L('Shared workspace','مساحة العمل المشتركة')),workspace,code,row(btn(L('Create workspace','إنشاء مساحة عمل'),async()=>{if(!workspace.value.trim())throw new Error(L('Enter a workspace name.','أدخل اسم مساحة العمل.'));const r=await cloudClient().rpc('aql_create_workspace',{p_name:workspace.value.trim()});if(r.error)throw r.error;const x=Array.isArray(r.data)?r.data[0]:r.data;if(!x||!x.workspace_id)throw new Error(L('Workspace was created but no ID was returned. Check the SQL setup.','تم إنشاء مساحة العمل لكن لم يصل المعرّف. راجع إعداد SQL.'));localStorage.setItem(CLOUD_WS_KEY,x.workspace_id);const jc=x.join_code||'';note('Workspace created. Join code (share only with trusted users): '+jc,'تم إنشاء مساحة العمل. رمز الانضمام (شاركه مع الموثوقين فقط): '+jc);render()}),btn(L('Join workspace','الانضمام لمساحة'),async()=>{if(!code.value.trim())throw new Error(L('Enter the join code.','أدخل رمز الانضمام.'));const r=await cloudClient().rpc('aql_join_workspace',{p_code:code.value.trim()});if(r.error)throw r.error;localStorage.setItem(CLOUD_WS_KEY,r.data);note('Joined workspace as inspector. The manager can change your role.','تم الانضمام لمساحة العمل بصفة مفتش. يستطيع المدير تغيير صلاحيتك.');render()})),
+   h('p',{class:'hint'},status()),
+   row(btn(L('Upload local data to cloud','رفع البيانات المحلية للسحابة'),async()=>{await done(await cloudSync('push'))}),btn(L('Download cloud data to this device','تنزيل بيانات السحابة لهذا الجهاز'),async()=>{if(!confirm(L('Cloud versions will replace local records that were changed on both sides. Continue?','نسخ السحابة ستحل محل السجلات المعدلة في الجهتين. هل تريد المتابعة؟')))return;await done(await cloudSync('pull'))}),btn(L('Sync both ways','مزامنة في الاتجاهين'),async()=>{await done(await cloudSync('both'))})),
+   h('label',{class:'chk'},h('input',{type:'checkbox',checked:localStorage.getItem(CLOUD_AUTO_KEY)!=='off',onChange:e=>localStorage.setItem(CLOUD_AUTO_KEY,e.target.checked?'on':'off')}),L('Automatic sync (every few minutes while online)','مزامنة تلقائية (كل بضع دقائق عند توفر الإنترنت)')),
+   msg,
+   h('div',{class:'divider'}),h('h4',{},L('Cloud members & roles','أعضاء السحابة وصلاحياتهم')),
+   h('p',{class:'hint'},L('Inspectors can add/edit inspections only. Managers can also change library, AQL plans, settings and delete records. Only the owner changes roles.','المفتش يضيف ويعدل الفحوصات فقط. المدير يعدل أيضاً المكتبة وخطط AQL والإعدادات ويحذف السجلات. المالك وحده يغير الصلاحيات.')),
+   row(btn(L('Show members','عرض الأعضاء'),loadMembers),btn(L('New join code','رمز انضمام جديد'),async()=>{const r=await cloudClient().rpc('aql_rotate_join_code',{p_workspace:needWs()});if(r.error)throw r.error;note('New join code: '+r.data,'رمز الانضمام الجديد: '+r.data)})),membersBox,
+   h('p',{class:'warn'},L('Run the latest AQL_Supabase_Setup.sql once in Supabase. Not synced by design: members and PINs (they stay on each device for security) and customer-comparison PDFs. When the same record changed on two devices, the newer edit wins (a device joining for the first time adopts the workspace settings).','شغّل أحدث ملف AQL_Supabase_Setup.sql مرة واحدة في Supabase. لا تتزامن عمداً: الأعضاء والأرقام السرية (تبقى على كل جهاز للأمان) وملفات PDF الخاصة بالمقارنات. عند تعديل نفس السجل على جهازين يفوز التعديل الأحدث (والجهاز الذي ينضم لأول مرة يتبنى إعدادات مساحة العمل).')));
 }
+
 async function aqlPhotoToCloud(v,c,ws,basePath,seq){
  if(typeof v==='string'&&/^data:image\//i.test(v)){
    const blob=await (await fetch(v)).blob();
@@ -823,23 +842,111 @@ async function aqlPhotoFromCloud(v,c){
  if(v&&typeof v==='object'){const o={};for(const [k,x] of Object.entries(v))o[k]=await aqlPhotoFromCloud(x,c);return o}
  return v;
 }
-async function cloudPush(){
- const c=cloudClient(),ws=localStorage.getItem('aql-cloud-workspace-v1');
+/* ---- safe two-way sync engine: per-record change detection, conflict rules, tombstones ---- */
+const SYNC_NEW_META=ws=>({id:'syncmeta',ws,h:{},s:{},tomb:{},aud:{}});
+async function syncHash(o){const s=JSON.stringify(o);try{const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}catch(e){return fbHash(s,'sync')}}
+async function cloudRole(c,ws){const r=await c.rpc('aql_my_role',{p_workspace:ws});if(r.error){if(/aql_my_role|schema cache|does not exist|Could not find/i.test(r.error.message||''))return 'legacy';throw r.error}if(!r.data)throw new Error(L('This account is not a member of the workspace. Join it with the manager\'s code.','هذا الحساب ليس عضواً في مساحة العمل. انضم برمز المدير.'));return r.data}
+async function cloudFetchPayloads(c,ws,keys){const by={};keys.forEach(k=>{const i=k.indexOf('/');(by[k.slice(0,i)]=by[k.slice(0,i)]||[]).push(k.slice(i+1))});const out=new Map();
+ for(const [t,ids] of Object.entries(by))for(let i=0;i<ids.length;i+=20){const r=await c.from('aql_cloud_records').select('record_type,record_id,payload,updated_at').eq('workspace_id',ws).eq('record_type',t).in('record_id',ids.slice(i,i+20));if(r.error)throw r.error;for(const x of r.data)out.set(t+'/'+x.record_id,x)}return out}
+async function cloudRemovePhotos(c,ws,type,id){try{const base=`${ws}/${type}/${encodeURIComponent(String(id)).replace(/%/g,'_')}`;const l=await c.storage.from('aql-photos').list(base);if(l&&l.data&&l.data.length)await c.storage.from('aql-photos').remove(l.data.map(f=>base+'/'+f.name))}catch(e){}}
+async function cloudSync(mode,opts){opts=opts||{};
+ const c=cloudClient(),ws=localStorage.getItem(CLOUD_WS_KEY);
  if(!ws)throw new Error(L('Create or join a workspace first.','أنشئ مساحة عمل أو انضم إليها أولاً.'));
  const ses=await c.auth.getSession();if(ses.error)throw ses.error;if(!ses.data.session)throw new Error(L('Sign in to your cloud account first.','سجل الدخول إلى حساب السحابة أولاً.'));
- const sets=[['library',await DB.all('library')],['plans',await DB.all('plans')],['inspections',await DB.all('inspections')]];
- const kv=await DB.all('kv');sets.push(['kv',kv.filter(x=>['settings','lists'].includes(x.id))]);sets.push(['audit',S.audit.map((x,i)=>({id:String(x.id||x.at||i),...x}))]);
- let batch=[];
- for(const [type,items] of sets){for(const item of items){const seq={n:0};const safeId=encodeURIComponent(String(item.id)).replace(/%/g,'_');const payload=await aqlPhotoToCloud(item,c,ws,`${ws}/${type}/${safeId}`,seq);batch.push({workspace_id:ws,record_type:type,record_id:String(item.id),payload,updated_at:new Date().toISOString()});if(batch.length>=20){const r=await c.from('aql_cloud_records').upsert(batch,{onConflict:'workspace_id,record_type,record_id'});if(r.error)throw r.error;batch=[]}}}
- if(batch.length){const r=await c.from('aql_cloud_records').upsert(batch,{onConflict:'workspace_id,record_type,record_id'});if(r.error)throw r.error}
+ const role=await cloudRole(c,ws),mgr=role!=='inspector',canW=k=>mgr||k.startsWith('inspections/');
+ let meta=await DB.get('kv','syncmeta');if(!meta||meta.ws!==ws)meta=SYNC_NEW_META(ws);['h','s','tomb','aud'].forEach(f=>meta[f]=meta[f]||{});
+ const st={up:0,down:0,del:0,delLocal:0,conf:0,skip:0,err:'',changed:false},T='aql_cloud_records',OC={onConflict:'workspace_id,record_type,record_id'};
+ const fail=e=>{st.skip++;if(!st.err)st.err=(e&&e.message)||String(e)};
+ const sput=(s,o)=>{DB.own++;return DB.put(s,o)};
+ const rev0=DB.rev-DB.own,startT=Date.now();
+ const quick=!!opts.fast&&CLOUD_SEEN.ws===ws&&CLOUD_SEEN.rev===rev0;
+ try{
+  /* 1. cloud index (metadata only) */
+  const idx=new Map();let from=0;
+  while(true){const r=await c.from(T).select('record_type,record_id,updated_at').eq('workspace_id',ws).order('record_type').order('record_id').range(from,from+499);if(r.error)throw r.error;for(const x of r.data)idx.set(x.record_type+'/'+x.record_id,Date.parse(x.updated_at));if(r.data.length<500)break;from+=500}
+  /* 2. local records */
+  const local=new Map();
+  for(const t of ['library','plans','inspections'])for(const it of await DB.all(t))local.set(t+'/'+it.id,{store:t,type:t,id:String(it.id),obj:it});
+  for(const it of await DB.all('kv'))if(it.id==='settings'||it.id==='lists')local.set('kv/'+it.id,{store:'kv',type:'kv',id:it.id,obj:it});
+  const hc=new Map(),H=async k=>{if(!hc.has(k))hc.set(k,await syncHash(local.get(k).obj));return hc.get(k)};
+  const lchg=async k=>(quick&&meta.h[k]!==undefined)?false:(await H(k))!==meta.h[k];
+  /* 3. decide per record */
+  const toPull=new Set(),toPush=new Set(),toDelCloud=[],toDelLocal=[],conflicts=[];
+  const keys=new Set([...local.keys(),...idx.keys()].filter(k=>!k.startsWith('audit/')));
+  for(const k of keys){
+   const L0=local.get(k),cs=idx.get(k),bs=meta.s[k],tomb=meta.tomb[k],cw=canW(k);
+   if(!L0){
+    if(cs===undefined){delete meta.tomb[k];delete meta.h[k];delete meta.s[k];continue}
+    if(tomb){if(bs!==undefined&&cs===bs){if(mode!=='pull'&&cw)toDelCloud.push(k);else st.skip++}else{delete meta.tomb[k];if(mode!=='push')toPull.add(k)}continue}
+    if(mode!=='push')toPull.add(k);continue}
+   if(tomb)delete meta.tomb[k];
+   if(cs===undefined){
+    if(bs!==undefined){if(mode!=='push'&&!(await lchg(k)))toDelLocal.push(k);else if(mode!=='pull'&&cw)toPush.add(k);continue}
+    if(mode!=='pull'&&cw)toPush.add(k);continue}
+   const cch=bs===undefined||cs!==bs,lc=await lchg(k);
+   if(!lc&&!cch)continue;
+   if(lc&&!cch){if(mode!=='pull'&&cw)toPush.add(k);continue}
+   if(!lc&&cch){if(mode!=='push')toPull.add(k);continue}
+   conflicts.push(k);
+  }
+  /* 4. resolve conflicts (newer edit wins; explicit upload/download choose a side) */
+  const need=[...toPull,...conflicts],fetched=need.length?await cloudFetchPayloads(c,ws,need):new Map();
+  const ts=o=>Math.max(+o.updatedAt||0,+o.deletedAt||0);
+  for(const k of conflicts){
+   const row=fetched.get(k),lo=local.get(k).obj,cw=canW(k);
+   if(!row||!row.payload||typeof row.payload!=='object'){if(mode!=='pull'&&cw)toPush.add(k);continue}
+   const co=row.payload;
+   if(ts(lo)>0&&ts(co)>0&&ts(lo)===ts(co)){meta.h[k]=await H(k);meta.s[k]=idx.get(k);continue}
+   st.conf++;let w;
+   if(mode==='push')w=cw?'local':'cloud';else if(mode==='pull')w='cloud';
+   else if(ts(lo)>0&&ts(co)>0)w=ts(lo)>ts(co)?'local':'cloud';
+   else w=(meta.s[k]===undefined||!cw)?'cloud':'local';
+   if(w==='local'&&cw)toPush.add(k);else toPull.add(k)}
+  /* 5. pull */
+  for(const k of toPull){try{const row=fetched.get(k);if(!row||!row.payload||typeof row.payload!=='object')continue;const i=k.indexOf('/'),type=k.slice(0,i);
+    if(type==='kv'&&!['settings','lists'].includes(row.payload.id))continue;
+    const x=await aqlPhotoFromCloud(row.payload,c);await sput(type,x);meta.h[k]=await syncHash(await DB.get(type,x.id));meta.s[k]=idx.get(k);st.down++;st.changed=true}catch(e){fail(e)}}
+  /* 6. push */
+  let batch=[];const flush=async()=>{if(!batch.length)return;const r=await c.from(T).upsert(batch.map(b=>b.row),OC);if(r.error)throw r.error;batch.forEach(b=>{meta.h[b.k]=b.lh;meta.s[b.k]=b.stamp;st.up++});batch=[]};
+  for(const k of toPush){try{const lo=local.get(k),lh=await H(k),seq={n:0},safe=encodeURIComponent(lo.id).replace(/%/g,'_');
+    const payload=await aqlPhotoToCloud(lo.obj,c,ws,`${ws}/${lo.type}/${safe}`,seq),iso=new Date().toISOString();
+    batch.push({k,lh,stamp:Date.parse(iso),row:{workspace_id:ws,record_type:lo.type,record_id:lo.id,payload,updated_at:iso}});if(batch.length>=10)await flush()}catch(e){fail(e)}}
+  try{await flush()}catch(e){fail(e);batch=[]}
+  /* 7. deletions */
+  for(const k of toDelCloud){try{const i=k.indexOf('/'),type=k.slice(0,i),id=k.slice(i+1);const r=await c.from(T).delete().eq('workspace_id',ws).eq('record_type',type).eq('record_id',id);if(r.error)throw r.error;await cloudRemovePhotos(c,ws,type,id);delete meta.tomb[k];delete meta.h[k];delete meta.s[k];st.del++}catch(e){fail(e)}}
+  for(const k of toDelLocal){try{const L0=local.get(k);DB.noTomb=true;DB.own++;try{await DB.del(L0.store,L0.obj.id)}finally{DB.noTomb=false}delete meta.h[k];delete meta.s[k];st.delLocal++;st.changed=true}catch(e){fail(e)}}
+  /* 8. audit log: union, newest first, capped at 500 */
+  if(mode!=='pull'){const kv=await DB.all('kv'),mine=((kv.find(x=>x.id==='audit')||{items:[]}).items).map((x,i)=>({...x,id:String(x.id||x.at||i)})).filter(x=>!meta.aud[x.id]);
+    for(let i=0;i<mine.length;i+=20){const part=mine.slice(i,i+20);const r=await c.from(T).upsert(part.map(x=>({workspace_id:ws,record_type:'audit',record_id:x.id,payload:x,updated_at:new Date().toISOString()})),OC);if(r.error){fail(r.error);break}part.forEach(x=>meta.aud[x.id]=1)}}
+  if(mode!=='push'){const kv=await DB.all('kv'),old=(kv.find(x=>x.id==='audit')||{items:[]}).items,have=new Set(old.map(x=>String(x.id||x.at)));
+    const miss=[...idx.keys()].filter(k=>k.startsWith('audit/')&&!meta.aud[k.slice(6)]&&!have.has(k.slice(6)));
+    if(miss.length){const rows=await cloudFetchPayloads(c,ws,miss),add=[];for(const [k,r] of rows)if(r.payload&&r.payload.action){add.push(r.payload);meta.aud[k.slice(6)]=1}
+      if(add.length){const mp=new Map();[...old,...add].forEach((x,i)=>mp.set(String(x.id||x.at||i),x));await sput('kv',{id:'audit',items:[...mp.values()].sort((a,b)=>(b.at||0)-(a.at||0)).slice(0,500)});st.changed=true}}}
+  if(Object.keys(meta.aud).length>3000)meta.aud={};
+ }finally{
+  try{const cur=await DB.get('kv','syncmeta');if(cur&&cur.ws===ws&&cur.tomb)for(const k in cur.tomb)if(!(k in meta.tomb)&&cur.tomb[k]>=startT)meta.tomb[k]=cur.tomb[k];await sput('kv',meta)}catch(e){}
+ }
+ CLOUD_SEEN={ws,rev:rev0};
+ localStorage.setItem(CLOUD_LASTSYNC_KEY,String(Date.now()));
+ return st;
 }
-async function cloudPull(){
- const c=cloudClient(),ws=localStorage.getItem('aql-cloud-workspace-v1');if(!ws)throw new Error(L('Create or join a workspace first.','أنشئ مساحة عمل أو انضم إليها أولاً.'));
- const ses=await c.auth.getSession();if(ses.error)throw ses.error;if(!ses.data.session)throw new Error(L('Sign in to your cloud account first.','سجل الدخول إلى حساب السحابة أولاً.'));
- let all=[],from=0;while(true){const r=await c.from('aql_cloud_records').select('record_type,record_id,payload').eq('workspace_id',ws).order('record_type').range(from,from+199);if(r.error)throw r.error;all.push(...r.data);if(r.data.length<200)break;from+=200}
- const cloudAudit=[];for(const row of all){let x=row.payload;if(!x||typeof x!=='object')continue;x=await aqlPhotoFromCloud(x,c);if(row.record_type==='library')await DB.put('library',x);else if(row.record_type==='plans')await DB.put('plans',x);else if(row.record_type==='inspections')await DB.put('inspections',x);else if(row.record_type==='kv'&&['settings','lists'].includes(x.id))await DB.put('kv',x);else if(row.record_type==='audit'&&x.action)cloudAudit.push(x)}
- if(cloudAudit.length){const kv=await DB.all('kv'),old=(kv.find(x=>x.id==='audit')||{items:[]}).items,byKey=new Map();[...old,...cloudAudit].forEach((x,i)=>byKey.set(String(x.id||x.at||i),x));await DB.put('kv',{id:'audit',items:[...byKey.values()].slice(-500)})}
+/* automatic background sync (safe: only changed records, never blocks the form being edited) */
+let CLOUD_AUTO_T=0;
+async function cloudAuto(force){
+ try{
+  if(CLOUD_BUSY||localStorage.getItem(CLOUD_AUTO_KEY)==='off'||!navigator.onLine||!localStorage.getItem(CLOUD_WS_KEY))return;
+  if(!force&&Date.now()-CLOUD_AUTO_T<60000)return;
+  const cfg=cloudCfg();if(!cfg.url||!window.supabase||!window.supabase.createClient)return;
+  const s=await cloudClient().auth.getSession();if(!s.data||!s.data.session)return;
+  CLOUD_AUTO_T=Date.now();CLOUD_BUSY=true;
+  const st=await cloudSync('both',{fast:true});
+  CLOUD_LAST=(st.err?'Auto sync finished with errors: '+st.err:'');
+  if(st.changed){await loadAll();if(!dirty&&!(ROUTE.startsWith('#/new')||ROUTE.startsWith('#/i/')))render()}
+ }catch(e){CLOUD_LAST='Auto sync failed: '+((e&&e.message)||e)}finally{CLOUD_BUSY=false}
 }
+window.addEventListener('online',()=>cloudAuto(true));
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)cloudAuto()});
+setInterval(()=>cloudAuto(),90000);setTimeout(()=>cloudAuto(true),5000);
 
 function vSettings(){const s=S.settings;SINGLE.forEach(g=>{s[g]=s[g]||[]});const msg=h('p',{class:'hint'});
   const imgF=(lb,k)=>h('div',{class:'row wrap'},h('b',{style:'flex:1;font-size:14px'},lb),s[k]?h('img',{src:s[k],style:'height:44px'}):null,h('button',{class:'btn s',onClick:()=>pickOne(v=>{s[k]=v;render()})},L('Upload','رفع')),s[k]?h('button',{class:'btn s',onClick:()=>{s[k]='';render()}},'🗑'):null);

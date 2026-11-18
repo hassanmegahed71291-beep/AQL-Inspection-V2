@@ -24,3 +24,7 @@ AQL build validation (static checks)
 
 - MEYAR rebrand update (18 Nov 2026): preserved the existing AQL Inspection project and data model; added a 3D-style M + underline app icon in 192/512 sizes, MEYAR wordmark using the same M mark, updated PWA/Apple metadata and Capacitor app label, moved the dark-mode toggle from the authenticated top bar into the navigation menu, and migrated the stored platform display name to MEYAR without resetting inspection data.
 - Validation: app.js syntax check PASSED; package and both manifest JSON validations PASSED; icon assets generated. Full Vite build and live browser/device testing NOT RUN in this environment.
+
+- Cloud sync rewrite (18 Nov 2026): per-record change detection, newest-edit-wins conflicts, deletion tombstones, role-based RLS SQL, auto sync, visible status messages.
+- Tested in headless Chromium against a simulated Supabase (2 owner devices + 1 inspector + 1 new device): push/pull with photos, stale-device overwrite prevented, real conflict resolution, deletion propagation without resurrection, no photo re-upload, inspector write limits, new-device adoption: PASSED. 65 UI buttons clicked on all routes: no JS errors. npm install + vite build: PASSED (after copy-static fix).
+- SQL file parsed with a PostgreSQL parser (syntax OK). NOT RUN: live Supabase (RLS/RPC), real phones, APK build, real network conditions.

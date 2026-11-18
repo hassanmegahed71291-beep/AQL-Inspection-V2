@@ -1,11 +1,11 @@
 {
   "name": "meyar-inspection-app",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "MEYAR cross-platform quality inspection app",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "vite build",
+    "build": "vite build && node copy-static.mjs",
     "preview": "vite preview --host 0.0.0.0",
     "cap:sync": "npm run build && cap sync",
     "cap:android": "cap open android",
