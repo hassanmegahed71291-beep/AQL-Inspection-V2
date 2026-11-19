@@ -35,10 +35,10 @@ const sevL={critical:['Critical','حرج'],major:['Major','رئيسي'],minor:['
 const stL=s=>({draft:L('Draft','مسودة'),in_progress:L('In progress','قيد التنفيذ'),pending_review:L('Pending review','بانتظار المراجعة'),approved:L('Approved','معتمد'),rejected:L('Rejected','مرفوض')})[s]||s;
 /* ---------- storage (IndexedDB, this device only) ---------- */
 const DB={db:null,
-  open(){return new Promise((res,rej)=>{const r=indexedDB.open('aql-inspection',2);r.onupgradeneeded=()=>{['kv','library','plans','inspections','comparisons','cmpfiles'].forEach(s=>{if(!r.result.objectStoreNames.contains(s))r.result.createObjectStore(s,{keyPath:'id'})})};r.onsuccess=()=>{this.db=r.result;res()};r.onerror=()=>rej(r.error)})},
+  open(){return new Promise((res,rej)=>{const r=indexedDB.open('aql-inspection',3);r.onupgradeneeded=()=>{['kv','library','plans','inspections','comparisons','cmpfiles','files','filedata'].forEach(s=>{if(!r.result.objectStoreNames.contains(s))r.result.createObjectStore(s,{keyPath:'id'})})};r.onsuccess=()=>{this.db=r.result;res()};r.onerror=()=>rej(r.error)})},
   tx(s,m,f){return new Promise((res,rej)=>{const t=this.db.transaction(s,m);let r;try{r=f(t.objectStore(s))}catch(e){return rej(e)}t.oncomplete=()=>res(r&&r.result);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error)})},
-  all(s){return this.tx(s,'readonly',st=>st.getAll())},get(s,id){return this.tx(s,'readonly',st=>st.get(id))},rev:0,own:0,noTomb:false,
-  put(s,o){DB.rev++;return this.tx(s,'readwrite',st=>st.put(o))},clear(s){return this.tx(s,'readwrite',st=>st.clear())},del(s,id){DB.rev++;return this.tx(s,'readwrite',st=>st.delete(id)).then(async r=>{if(!DB.noTomb&&['library','plans','inspections'].includes(s)){try{const m=(await DB.get('kv','syncmeta'))||{id:'syncmeta',ws:'',h:{},s:{},tomb:{},aud:{}};m.tomb=m.tomb||{};m.tomb[s+'/'+id]=Date.now();await DB.put('kv',m)}catch(e){}}return r})}};
+  all(s){return this.tx(s,'readonly',st=>st.getAll())},get(s,id){return this.tx(s,'readonly',st=>st.get(id))},rev:0,own:0,noTomb:false,noKick:false,
+  put(s,o){DB.rev++;if(s==='inspections'&&!DB.noKick)cloudKick();return this.tx(s,'readwrite',st=>st.put(o))},clear(s){return this.tx(s,'readwrite',st=>st.clear())},del(s,id){DB.rev++;return this.tx(s,'readwrite',st=>st.delete(id)).then(async r=>{if(!DB.noTomb&&['library','plans','inspections'].includes(s)){try{const m=(await DB.get('kv','syncmeta'))||{id:'syncmeta',ws:'',h:{},s:{},tomb:{},aud:{}};m.tomb=m.tomb||{};m.tomb[s+'/'+id]=Date.now();await DB.put('kv',m)}catch(e){}}return r})}};
 const DEPTS=[['Cutting','القص'],['Front Preparation','تجهيز الأمام'],['Sleeve Preparation','تجهيز الأكمام'],['Lining Preparation','تجهيز البطانة'],['Assembly','التجميع'],['Pressing','الكي'],['Packing','التعبئة']];
 const defSettings=()=>({id:'settings',platformName:'MEYAR',factoryName:'ALPHA OMEGA EGYPT',inspectorName:'',jacket:DEPTS.map(([en,ar])=>({id:'d_'+uid(6),en,ar,active:true})),trousers:[],vest:[],shorts:[],minDefPages:2,minItemPages:0});
 async function loadAll(){S.lib=await DB.all('library');S.plans=await DB.all('plans');const allIns=(await DB.all('inspections')).sort((a,b)=>b.createdAt-a.createdAt),lim=Date.now()-30*864e5,keepIns=[];
@@ -77,7 +77,7 @@ function validateRows(rows){const e=[];const s=[...rows].sort((a,b)=>a.lotMin-b.
 const activePlan=()=>{const p=S.plans.find(x=>x.active&&x.current);if(!p)return null;const v=p.versions[p.current];return{id:p.id,name:p.name,version:p.current,...v}};
 /* ---------- state / router ---------- */
 let D=null,dirty=false,errs=[],okMsg='',busy=false,DN='',LE=null,PE=null;
-const NAV=[['#/','📊','Manager Panel','لوحة المدير'],['#/new','➕','New Inspection','فحص جديد'],['#/archive','🗂','Inspection Archive','أرشيف الفحوصات'],['#/charts','🥧','Pie Charts','الرسوم الدائرية'],['#/monthly','📅','Monthly Quality Report','تقرير الجودة الشهري'],['#/compare','⚖️','Customer vs Factory Report','مقارنة تقرير العميل بالمصنع'],['#/library','📚','Defect Library','مكتبة العيوب'],['#/reports','📄','Reports','التقارير'],['#/aql','🛠','AQL Plans','خطط AQL'],['#/settings','⚙️','General Settings','الإعدادات العامة']];
+const NAV=[['#/','📊','Manager Panel','لوحة المدير'],['#/new','➕','New Inspection','فحص جديد'],['#/archive','🗂','Inspection Archive','أرشيف الفحوصات'],['#/files','📎','File Archive','أرشيف الملفات'],['#/charts','🥧','Pie Charts','الرسوم الدائرية'],['#/monthly','📅','Monthly Quality Report','تقرير الجودة الشهري'],['#/compare','⚖️','Customer vs Factory Report','مقارنة تقرير العميل بالمصنع'],['#/library','📚','Defect Library','مكتبة العيوب'],['#/reports','📄','Reports','التقارير'],['#/aql','🛠','AQL Plans','خطط AQL'],['#/cloud','☁️','My Cloud','سحابتي'],['#/settings','⚙️','General Settings','الإعدادات العامة']];
 let ROUTE=(location.hash&&location.hash.startsWith('#/'))?location.hash:'#/';
 function go(x){if(x===ROUTE)return;
   if(dirty&&!confirm(L('You have unsaved changes. Leave without saving?','لديك تغييرات غير محفوظة. المغادرة دون حفظ؟')))return;
@@ -138,10 +138,10 @@ function render(){document.documentElement.lang=S.lang;document.documentElement.
   const sw=h('button',{class:'btn ghost s',onClick:()=>{S.lang=S.lang==='en'?'ar':'en';LS.set('lang',S.lang);render()}},S.lang==='en'?'العربية':'English');
   const link=n=>h('a',{href:n[0],class:n===curNav?'on':''},h('span',{},n[1]),' ',L(n[2],n[3]));
   const name='MEYAR',fac=S.settings.factoryName;
-  const v=({'':vPanel,new:vIns,i:vIns,archive:()=>vList(false),reports:()=>vList(true),charts:vCharts,monthly:vMonthly,compare:vCompare,library:vLib,aql:vAql,settings:vSettings,report:vReport})[hash.split('/')[1]||'']||vDash;
+  const v=({'':vPanel,new:vIns,i:vIns,archive:()=>vList(false),reports:()=>vList(true),charts:vCharts,monthly:vMonthly,compare:vCompare,library:vLib,aql:vAql,settings:vSettings,report:vReport,files:vFiles,cloud:vCloud})[hash.split('/')[1]||'']||vDash;
   $('#app').replaceChildren(h('div',{class:'shell'},
     h('aside',{class:'side'},h('div',{class:'brand'},h('div',{class:'brand-wordmark',dir:'ltr'},h('img',{src:'./icons/meyar-192.png',alt:'M'}),h('b',{},'EYAR')),h('small',{},fac)),navs.map(link),h('div',{style:'margin-top:auto;display:grid;gap:8px'},themeButton(),h('small',{style:'color:#8fa6bb;padding:0 8px'},S.me.name+' · '+(isMgr()?L('Manager','مدير'):L('Inspector','مفتش'))),sw,outBtn)),
-    h('div',{class:'main'},h('header',{class:'top'},h('button',{class:'menu-toggle',type:'button','aria-label':'Open navigation',onClick:()=>{const m=$('#top-menu');if(m)m.classList.toggle('open')}},'☰'),h('div',{class:'top-brand',dir:'ltr'},h('img',{src:'./icons/meyar-192.png',alt:'M'}),h('span',{},'EYAR')),h('h1',{},L(curNav[2],curNav[3])),h('span',{id:'autosave-status',class:'autosave-status'},dirty?L('Unsaved changes','تغييرات غير محفوظة'):L('Saved','تم الحفظ')),h('span',{style:'display:flex;gap:6px'},sw,outBtn)),h('nav',{id:'top-menu',class:'top-menu'},[...navs.map(link),h('div',{class:'menu-theme'},themeButton())]),h('main',{id:'view'},pagePdfBar(),v()))));
+    h('div',{class:'main'},h('header',{class:'top'},h('button',{class:'menu-toggle',type:'button','aria-label':'Open navigation',onClick:()=>{const m=$('#top-menu');if(m)m.classList.toggle('open')}},'☰'),h('div',{class:'top-brand',dir:'ltr'},h('img',{src:'./icons/meyar-192.png',alt:'M'}),h('span',{},'EYAR')),h('h1',{},L(curNav[2],curNav[3])),h('span',{id:'autosave-status',class:'autosave-status'},dirty?L('Unsaved changes','تغييرات غير محفوظة'):L('Saved','تم الحفظ')),cloudChipEl(),h('span',{style:'display:flex;gap:6px'},sw,outBtn)),h('nav',{id:'top-menu',class:'top-menu'},[...navs.map(link),h('div',{class:'menu-theme'},themeButton())]),h('main',{id:'view'},pagePdfBar(),v()))));
   scrollTo(0,y)}
 /* ---------- dashboard ---------- */
 function vDash(){const done=S.ins.filter(i=>['approved','rejected'].includes(i.status));const c=s=>S.ins.filter(i=>s.includes(i.status)).length;const defs=done.flatMap(i=>i.defs||[]);const sum=k=>defs.reduce((a,d)=>a+num(d[k]),0);
@@ -170,7 +170,7 @@ function vList(rep){const F={q:'',st:'',g:'',cu:'',ins:'',rd:'',ty:''};const box
         :[h('button',{type:'button',class:'btn s p',onClick:e=>{e.stopPropagation();go('#/i/'+i.id)}},'📂 '+L('Open','فتح')),
           (isMgr()||(mine(i)&&EDIT.includes(i.status)))?h('button',{type:'button',class:'btn s d',onClick:e=>{e.stopPropagation();toTrash(i)}},'🗑 '+L('Delete','مسح')):null]))):[h('div',{class:'card empty'},h('h2',{},trash?L('Trash is empty','السلة فارغة'):L('No inspections found','لا توجد فحوصات')))]))};
   fill();
-  return h('div',{},h('div',{class:'row wrap'},h('input',{placeholder:L('Search ID, order, customer, model, inspector','ابحث بالرقم أو الطلبية أو العميل أو الموديل أو المفتش'),onInput:e=>{F.q=e.target.value;fill()}}),
+  return h('div',{},rep?null:archTabs('archive'),h('div',{class:'row wrap'},h('input',{placeholder:L('Search ID, order, customer, model, inspector','ابحث بالرقم أو الطلبية أو العميل أو الموديل أو المفتش'),onInput:e=>{F.q=e.target.value;fill()}}),
     h('select',{onChange:e=>{F.st=e.target.value;fill()}},h('option',{value:''},L('All statuses','كل الحالات')),['draft','in_progress','pending_review','approved','rejected'].map(s=>h('option',{value:s},stL(s)))),
     h('select',{onChange:e=>{F.rd=e.target.value;fill()}},h('option',{value:''},L('All inspection counts','كل مرات الفحص')),RND_OPTS().map(([v,t])=>h('option',{value:v},t))),
     h('select',{onChange:e=>{F.ty=e.target.value;fill()}},h('option',{value:''},L('All inspection types','كل أنواع الفحص')),TYPE_OPTS().map(([v,t])=>h('option',{value:v},t))),
@@ -849,7 +849,7 @@ async function cloudRole(c,ws){const r=await c.rpc('aql_my_role',{p_workspace:ws
 async function cloudFetchPayloads(c,ws,keys){const by={};keys.forEach(k=>{const i=k.indexOf('/');(by[k.slice(0,i)]=by[k.slice(0,i)]||[]).push(k.slice(i+1))});const out=new Map();
  for(const [t,ids] of Object.entries(by))for(let i=0;i<ids.length;i+=20){const r=await c.from('aql_cloud_records').select('record_type,record_id,payload,updated_at').eq('workspace_id',ws).eq('record_type',t).in('record_id',ids.slice(i,i+20));if(r.error)throw r.error;for(const x of r.data)out.set(t+'/'+x.record_id,x)}return out}
 async function cloudRemovePhotos(c,ws,type,id){try{const base=`${ws}/${type}/${encodeURIComponent(String(id)).replace(/%/g,'_')}`;const l=await c.storage.from('aql-photos').list(base);if(l&&l.data&&l.data.length)await c.storage.from('aql-photos').remove(l.data.map(f=>base+'/'+f.name))}catch(e){}}
-async function cloudSync(mode,opts){opts=opts||{};
+async function cloudSyncCore(mode,opts){opts=opts||{};
  const c=cloudClient(),ws=localStorage.getItem(CLOUD_WS_KEY);
  if(!ws)throw new Error(L('Create or join a workspace first.','أنشئ مساحة عمل أو انضم إليها أولاً.'));
  const ses=await c.auth.getSession();if(ses.error)throw ses.error;if(!ses.data.session)throw new Error(L('Sign in to your cloud account first.','سجل الدخول إلى حساب السحابة أولاً.'));
@@ -857,7 +857,7 @@ async function cloudSync(mode,opts){opts=opts||{};
  let meta=await DB.get('kv','syncmeta');if(!meta||meta.ws!==ws)meta=SYNC_NEW_META(ws);['h','s','tomb','aud'].forEach(f=>meta[f]=meta[f]||{});
  const st={up:0,down:0,del:0,delLocal:0,conf:0,skip:0,err:'',changed:false},T='aql_cloud_records',OC={onConflict:'workspace_id,record_type,record_id'};
  const fail=e=>{st.skip++;if(!st.err)st.err=(e&&e.message)||String(e)};
- const sput=(s,o)=>{DB.own++;return DB.put(s,o)};
+ const sput=(s,o)=>{DB.own++;DB.noKick=true;try{return DB.put(s,o)}finally{DB.noKick=false}};
  const rev0=DB.rev-DB.own,startT=Date.now();
  const quick=!!opts.fast&&CLOUD_SEEN.ws===ws&&CLOUD_SEEN.rev===rev0;
  try{
@@ -937,16 +937,234 @@ async function cloudAuto(force){
   if(CLOUD_BUSY||localStorage.getItem(CLOUD_AUTO_KEY)==='off'||!navigator.onLine||!localStorage.getItem(CLOUD_WS_KEY))return;
   if(!force&&Date.now()-CLOUD_AUTO_T<60000)return;
   const cfg=cloudCfg();if(!cfg.url||!window.supabase||!window.supabase.createClient)return;
-  const s=await cloudClient().auth.getSession();if(!s.data||!s.data.session)return;
+  const s=await cloudClient().auth.getSession();if(!s.data||!s.data.session){CLOUD_ST.s='signedout';cloudChip();return}
+  CLOUD_UID=s.data.session.user.id;cloudRealtime();
   CLOUD_AUTO_T=Date.now();CLOUD_BUSY=true;
   const st=await cloudSync('both',{fast:true});
   CLOUD_LAST=(st.err?'Auto sync finished with errors: '+st.err:'');
-  if(st.changed){await loadAll();if(!dirty&&!(ROUTE.startsWith('#/new')||ROUTE.startsWith('#/i/')))render()}
+  if(st.changed){await loadAll();notifyNewReports();if(!dirty&&!(ROUTE.startsWith('#/new')||ROUTE.startsWith('#/i/')))render()}
  }catch(e){CLOUD_LAST='Auto sync failed: '+((e&&e.message)||e)}finally{CLOUD_BUSY=false}
 }
 window.addEventListener('online',()=>cloudAuto(true));
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)cloudAuto()});
 setInterval(()=>cloudAuto(),90000);setTimeout(()=>cloudAuto(true),5000);
+/* =====================================================================
+   v3: per-inspector cloud account page, live alerts, file archive
+   ===================================================================== */
+const CLOUD_ST={s:'idle',err:''};            /* idle | off | signedout | busy | ok | err */
+const FILES_AUTO_KEY='aql-files-auto-v1',PEND_KEY='aql-seen-pending-v1';
+function cloudChipText(){
+ if(!LS.get(CLOUD_WS_KEY))return '☁️ '+L('Not linked','غير مربوط');
+ if(!navigator.onLine)return '☁️ '+L('Offline','بدون إنترنت');
+ if(CLOUD_ST.s==='signedout')return '☁️ '+L('Sign in','سجّل الدخول');
+ if(CLOUD_ST.s==='busy')return '☁️ '+L('Syncing…','مزامنة…');
+ if(CLOUD_ST.s==='err')return '☁️ ⚠ '+L('Error','خطأ');
+ const t=+LS.get(CLOUD_LASTSYNC_KEY)||0;
+ return '☁️ ✓ '+(t?new Date(t).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'');
+}
+function cloudChipEl(){return h('a',{id:'cloud-chip',href:'#/cloud',class:'cloud-chip '+CLOUD_ST.s,title:CLOUD_ST.err||''},cloudChipText())}
+function cloudChip(){const el=document.getElementById('cloud-chip');if(!el)return;el.textContent=cloudChipText();el.className='cloud-chip '+CLOUD_ST.s;el.title=CLOUD_ST.err||''}
+window.addEventListener('offline',cloudChip);window.addEventListener('online',cloudChip);
+
+/* sync wrapper: keeps the header chip up to date */
+async function cloudSync(mode,opts){CLOUD_ST.s='busy';cloudChip();
+ try{const st=await cloudSyncCore(mode,opts);CLOUD_ST.s=st.err?'err':'ok';CLOUD_ST.err=st.err||'';return st}
+ catch(e){CLOUD_ST.s='err';CLOUD_ST.err=(e&&e.message)||String(e);throw e}
+ finally{cloudChip()}}
+
+/* push right after a local change (e.g. an inspector submits a report) instead of waiting for the 90 s timer */
+let KICK_T=0,KICK_N=0;
+function cloudKick(){clearTimeout(KICK_T);KICK_N=0;KICK_T=setTimeout(kickRun,2500)}
+function kickRun(){if(CLOUD_BUSY&&KICK_N++<6){KICK_T=setTimeout(kickRun,3000);return}cloudAuto(true)}
+
+/* small toast */
+function toast(txt,href){let t=document.getElementById('toast');if(!t){t=h('div',{id:'toast',class:'toast noprint'});document.body.append(t)}
+ t.textContent=txt;t.onclick=()=>{t.classList.remove('on');if(href)go(href)};t.classList.add('on');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('on'),9000)}
+
+/* manager: tell me about NEW reports waiting for review (compares with what was already seen on this device) */
+function notifyNewReports(){
+ try{if(!isMgr())return;const first=LS.get(PEND_KEY)===null;let seen=[];try{seen=JSON.parse(LS.get(PEND_KEY)||'[]')}catch(e){}
+  const keyOf=i=>i.id+'@'+(i.updatedAt||i.createdAt||0),cur=S.ins.filter(i=>i.status==='pending_review');
+  const fresh=cur.filter(i=>!seen.includes(keyOf(i))&&i.createdBy!==S.me.id);
+  LS.set(PEND_KEY,JSON.stringify(cur.map(keyOf).slice(-300)));
+  if(first||!fresh.length)return;
+  const who=[...new Set(fresh.map(i=>i.inspectorName).filter(Boolean))].join('، ');
+  toast('📥 '+L(fresh.length+' new report(s) waiting for your review'+(who?' — '+who:''),'وصلك '+fresh.length+' تقرير جديد بانتظار مراجعتك'+(who?' — '+who:'')),'#/')}catch(e){}}
+
+/* realtime: wakes the manager's app up the moment an inspector writes to the cloud */
+let CLOUD_RT=null,CLOUD_RT_WS='',RT_T=0,FILES_HOOK=null;
+function cloudRealtimeStop(){try{if(CLOUD_RT&&CLOUD_CLIENT)CLOUD_CLIENT.removeChannel(CLOUD_RT)}catch(e){}CLOUD_RT=null;CLOUD_RT_WS=''}
+function cloudRealtime(){
+ try{const ws=LS.get(CLOUD_WS_KEY);if(!ws||!window.supabase||!window.supabase.createClient)return;if(CLOUD_RT&&CLOUD_RT_WS===ws)return;cloudRealtimeStop();
+  const c=cloudClient();CLOUD_RT_WS=ws;
+  CLOUD_RT=c.channel('aql-'+ws).on('postgres_changes',{event:'*',schema:'public',table:'aql_cloud_records',filter:'workspace_id=eq.'+ws},p=>{
+    try{const n=p.new||{};
+     if(p.eventType==='INSERT'&&n.record_type==='files'&&isMgr()&&n.owner_id&&n.owner_id!==CLOUD_UID){const f=n.payload||{};toast('📎 '+L('New file from ','ملف جديد من ')+(f.uploaderName||f.uploaderEmail||'')+': '+(f.name||''),'#/files')}
+     if(FILES_HOOK&&n.record_type==='files')FILES_HOOK();
+    }catch(e){}
+    clearTimeout(RT_T);RT_T=setTimeout(()=>cloudAuto(true),1200)}).subscribe();
+ }catch(e){}}
+let CLOUD_UID='';
+window.addEventListener('load',()=>setTimeout(async()=>{try{const s=await cloudClient().auth.getSession();if(s.data&&s.data.session){CLOUD_UID=s.data.session.user.id;cloudRealtime()}else if(LS.get(CLOUD_WS_KEY)){CLOUD_ST.s='signedout';cloudChip()}}catch(e){}},3000));
+
+/* ---------- "My Cloud" page — for every user (inspector or manager) ---------- */
+function vCloud(){
+ const email=h('input',{type:'email',placeholder:L('Email','البريد الإلكتروني'),autocomplete:'email'}),
+  pass=h('input',{type:'password',placeholder:L('Password (8+ characters)','كلمة المرور (8 أحرف أو أكثر)'),autocomplete:'current-password'}),
+  code=h('input',{placeholder:L('Join code from the manager (first time only)','رمز الانضمام من المدير (أول مرة فقط)'),autocomplete:'off',style:'text-transform:uppercase'}),
+  msg=h('p',{class:'hint cloud-msg'},CLOUD_LAST),acct=h('div',{class:'stack'}),team=h('div',{class:'stack'});
+ const note=(en,ar)=>{CLOUD_LAST=L(en,ar);msg.textContent=CLOUD_LAST};
+ const guard=(label,fn,cls)=>h('button',{type:'button',class:'btn '+(cls||''),onClick:async e=>{const b=e.currentTarget;if(CLOUD_BUSY){note('Another cloud operation is running. Try again in a moment.','عملية سحابة أخرى قيد التنفيذ. حاول بعد لحظات.');return}
+   CLOUD_BUSY=true;b.disabled=true;note('Working…','جارٍ التنفيذ…');try{await fn()}catch(err){const m=(err&&err.message)||String(err);note('Error: '+m,'خطأ: '+m)}finally{CLOUD_BUSY=false;b.disabled=false}}},label);
+ /* after login: join with the code if given; otherwise find the workspace this account already belongs to (second device) */
+ const finishAuth=async()=>{const c=cloudClient();
+  if(code.value.trim()){const j=await c.rpc('aql_join_workspace',{p_code:code.value.trim()});if(j.error)throw j.error;LS.set(CLOUD_WS_KEY,j.data);code.value=''}
+  else if(!LS.get(CLOUD_WS_KEY)){const s=await c.auth.getSession(),uid=s.data.session.user.id;
+   const m=await c.from('aql_workspace_members').select('workspace_id,role').eq('user_id',uid);if(m.error)throw m.error;
+   if(m.data&&m.data.length===1)LS.set(CLOUD_WS_KEY,m.data[0].workspace_id);
+   else if(m.data&&m.data.length>1)LS.set(CLOUD_WS_KEY,m.data[0].workspace_id);}
+  const s2=await c.auth.getSession();CLOUD_UID=s2.data.session?s2.data.session.user.id:'';
+  if(!LS.get(CLOUD_WS_KEY)){CLOUD_ST.s='signedout';cloudChip();note('Signed in, but this account has no workspace yet. Enter the join code from your manager and press Sign in again.','تم تسجيل الدخول لكن الحساب غير مرتبط بمساحة عمل. اكتب رمز الانضمام من المدير ثم اضغط تسجيل الدخول.');await paint();return}
+  cloudRealtime();note('Signed in. Syncing…','تم تسجيل الدخول. جارٍ المزامنة…');
+  const st=await cloudSync('both');if(st.changed)await loadAll();note('Done. Sent '+st.up+', received '+st.down+'.'+(st.err?' First error: '+st.err:''),'اكتملت المزامنة. أُرسل '+st.up+'، وصل '+st.down+'.'+(st.err?' أول خطأ: '+st.err:''));
+  await paint();render()};
+ const signIn=guard(L('Sign in','تسجيل الدخول'),async()=>{if(!email.value.trim()||!pass.value)throw new Error(L('Enter email and password.','أدخل البريد وكلمة المرور.'));
+   const r=await cloudClient().auth.signInWithPassword({email:email.value.trim(),password:pass.value});if(r.error)throw r.error;await finishAuth()},'p');
+ const signUp=guard(L('Create account','إنشاء حساب'),async()=>{if(!email.value.trim()||pass.value.length<8)throw new Error(L('Enter email and a password of at least 8 characters.','أدخل البريد وكلمة مرور لا تقل عن 8 أحرف.'));
+   const r=await cloudClient().auth.signUp({email:email.value.trim(),password:pass.value});if(r.error)throw r.error;
+   if(r.data&&r.data.session){await finishAuth()}else note('Account created. Open the confirmation email, then come back and press Sign in (add the join code the first time).','تم إنشاء الحساب. افتح رسالة التأكيد في بريدك ثم ارجع واضغط تسجيل الدخول (واكتب رمز الانضمام أول مرة).')});
+ const paint=async()=>{
+  let ses=null;try{const s=await cloudClient().auth.getSession();ses=s.data&&s.data.session}catch(e){note('Error: '+e.message,'خطأ: '+e.message)}
+  const ws=LS.get(CLOUD_WS_KEY),t=+LS.get(CLOUD_LASTSYNC_KEY)||0;
+  if(!ses){acct.replaceChildren(h('div',{class:'card form'},h('h3',{},'☁️ '+L('Sign in to your cloud','سجّل الدخول إلى سحابتك')),
+    h('p',{class:'hint'},L('Use one account per person. Reports you submit reach the manager automatically; the same account on another device brings your data there.','استخدم حساباً لكل شخص. التقارير التي ترسلها تصل للمدير تلقائياً، ونفس الحساب على جهاز آخر يجلب بياناتك إليه.')),
+    email,pass,code,h('div',{class:'row wrap'},signIn,signUp)));team.replaceChildren();return}
+  let role='';try{role=await cloudRole(cloudClient(),ws)}catch(e){role=''}
+  const rl={owner:L('Owner','مالك'),manager:L('Manager','مدير'),inspector:L('Inspector','مفتش')}[role]||'—',mgr=role==='owner'||role==='manager';
+  acct.replaceChildren(h('div',{class:'card form'},h('h3',{},'☁️ '+L('Your cloud','سحابتك')),
+   h('div',{class:'kv'},h('span',{},L('Account','الحساب')),h('b',{},ses.user.email||'')),
+   h('div',{class:'kv'},h('span',{},L('Role in the cloud','الصلاحية في السحابة')),h('b',{},ws?rl:L('Not linked','غير مربوط'))),
+   h('div',{class:'kv'},h('span',{},L('Last sync','آخر مزامنة')),h('b',{},t?new Date(t).toLocaleString():L('never','لم تتم بعد'))),
+   role==='inspector'?h('p',{class:'hint'},L('You can send inspections and files. You only see your own cloud copies; the manager sees everything.','تستطيع إرسال الفحوصات والملفات. ترى نسخك أنت فقط في السحابة، والمدير يرى الجميع.')):null,
+   h('div',{class:'row wrap'},guard('🔄 '+L('Sync now','مزامنة الآن'),async()=>{const st=await cloudSync('both');if(st.changed)await loadAll();note('Done. Sent '+st.up+', received '+st.down+'.'+(st.err?' First error: '+st.err:''),'اكتملت المزامنة. أُرسل '+st.up+'، وصل '+st.down+'.'+(st.err?' أول خطأ: '+st.err:''));await paint();render()},'p'),
+    guard(L('Sign out of cloud','خروج من السحابة'),async()=>{cloudRealtimeStop();const r=await cloudClient().auth.signOut();if(r.error)throw r.error;CLOUD_UID='';CLOUD_ST.s='signedout';cloudChip();note('Signed out. Local data was not deleted.','تم تسجيل الخروج. لم تُحذف البيانات المحلية.');await paint()})),
+   h('label',{class:'chk'},h('input',{type:'checkbox',checked:LS.get(CLOUD_AUTO_KEY)!=='off',onChange:e=>LS.set(CLOUD_AUTO_KEY,e.target.checked?'on':'off')}),L('Automatic sync (right after changes, and every ~90 s while online)','مزامنة تلقائية (فور أي تغيير، وكل ~90 ثانية عند توفر الإنترنت)'))));
+  if(!mgr){team.replaceChildren();return}
+  team.replaceChildren(h('div',{class:'card form'},h('h3',{},'👥 '+L('Inspectors in the cloud','المفتشون في السحابة')),
+    h('div',{class:'row wrap'},guard(L('Show inspectors summary','عرض ملخص المفتشين'),async()=>{await teamSummary()}),
+     guard(L('New join code for inspectors','رمز انضمام جديد للمفتشين'),async()=>{const r=await cloudClient().rpc('aql_rotate_join_code',{p_workspace:ws});if(r.error)throw r.error;try{await navigator.clipboard.writeText(r.data)}catch(e){}note('New join code (copied if allowed): '+r.data,'رمز الانضمام الجديد (تم نسخه إن سمح المتصفح): '+r.data)}),
+     h('a',{class:'btn',href:'#/settings'},'⚙️ '+L('Workspace & roles','مساحة العمل والصلاحيات'))),
+    h('div',{id:'team-out'})))};
+ const teamSummary=async()=>{const c=cloudClient(),ws=LS.get(CLOUD_WS_KEY);
+  const mem=await c.rpc('aql_list_members',{p_workspace:ws});if(mem.error)throw mem.error;
+  const cnt=async type=>{const m=new Map();let from=0;while(true){const r=await c.from('aql_cloud_records').select('owner_id,updated_at').eq('workspace_id',ws).eq('record_type',type).range(from,from+999);if(r.error)throw r.error;
+    r.data.forEach(x=>{const e=m.get(x.owner_id)||{n:0,t:0};e.n++;e.t=Math.max(e.t,Date.parse(x.updated_at)||0);m.set(x.owner_id,e)});if(r.data.length<1000)break;from+=1000}return m};
+  const ins=await cnt('inspections'),fil=await cnt('files'),roleT={owner:L('Owner','مالك'),manager:L('Manager','مدير'),inspector:L('Inspector','مفتش')};
+  const tb=h('tbody');(mem.data||[]).forEach(m=>{const a=ins.get(m.user_id)||{n:0,t:0},b=fil.get(m.user_id)||{n:0,t:0},last=Math.max(a.t,b.t);
+    tb.append(h('tr',{},h('td',{style:'overflow-wrap:anywhere'},m.email),h('td',{},roleT[m.role]||m.role),h('td',{},a.n),h('td',{},b.n),h('td',{},last?new Date(last).toLocaleString():'—')))});
+  const out=document.getElementById('team-out');if(out)out.replaceChildren(h('div',{style:'overflow-x:auto'},h('table',{class:'tbl'},h('thead',{},h('tr',{},[L('Account','الحساب'),L('Role','الصلاحية'),L('Reports in cloud','تقارير في السحابة'),L('Files in cloud','ملفات في السحابة'),L('Last activity','آخر نشاط')].map(t=>h('th',{},t)))),tb)));
+  note('Summary loaded.','تم تحميل الملخص.')};
+ setTimeout(paint,0);
+ return h('div',{class:'stack'},acct,msg,team,h('p',{class:'warn'},L('Instant alerts reach the manager while the app is open. Offline work is kept on the device and sent when the internet returns. Members and PINs stay on each device by design.','التنبيه اللحظي يصل للمدير والتطبيق مفتوح. العمل بدون إنترنت يُحفظ على الجهاز ويُرسل عند عودة الإنترنت. الأعضاء والأرقام السرية تبقى على كل جهاز عمداً.')))}
+
+/* ---------- File archive: device -> archive -> cloud ---------- */
+const FILE_MAX=50*1024*1024;
+const FILES_CLOUD=new Map();let FILES_CLOUD_OK=false,FILES_CLOUD_ERR='',FILES_CLOUD_AT=0;
+const fmtSize=n=>n>=1048576?(n/1048576).toFixed(1)+' MB':n>=1024?Math.round(n/1024)+' KB':(n||0)+' B';
+const fileIcon=m=>{const s=((m.mime||'')+' '+(m.name||'')).toLowerCase();return /pdf/.test(s)?'📕':/image\/|\.(png|jpe?g|gif|webp|heic)\b/.test(s)?'🖼':/sheet|excel|csv|\.xlsx?\b/.test(s)?'📊':/word|\.docx?\b/.test(s)?'📝':/zip|rar|7z/.test(s)?'🗜':'📄'};
+const fileViewable=m=>{const s=((m.mime||'')+' '+(m.name||'')).toLowerCase();return /pdf|image\/|\.(png|jpe?g|gif|webp)\b/.test(s)};
+async function filesSession(){const c=cloudClient(),ws=LS.get(CLOUD_WS_KEY);
+ if(!ws)throw new Error(L('Link the cloud first (☁️ My Cloud).','اربط السحابة أولاً من صفحة ☁️ سحابتي.'));
+ const s=await c.auth.getSession();if(s.error)throw s.error;
+ if(!s.data.session)throw new Error(L('Sign in to the cloud first (☁️ My Cloud).','سجّل الدخول للسحابة أولاً من صفحة ☁️ سحابتي.'));
+ CLOUD_UID=s.data.session.user.id;return{c,ws,user:s.data.session.user}}
+async function filesCloudRefresh(force){
+ if(!force&&FILES_CLOUD_OK&&Date.now()-FILES_CLOUD_AT<20000)return true;
+ try{const {c,ws}=await filesSession();const rows=[];let from=0;
+  while(true){const r=await c.from('aql_cloud_records').select('record_id,payload,owner_id,updated_at').eq('workspace_id',ws).eq('record_type','files').order('updated_at',{ascending:false}).range(from,from+199);if(r.error)throw r.error;rows.push(...r.data);if(r.data.length<200)break;from+=200}
+  FILES_CLOUD.clear();rows.forEach(x=>FILES_CLOUD.set(x.record_id,x));
+  for(const f of await DB.all('files')){if(f.cloud&&!FILES_CLOUD.has(f.id)){f.cloud=null;await DB.put('files',f)}}
+  FILES_CLOUD_OK=true;FILES_CLOUD_ERR='';FILES_CLOUD_AT=Date.now();return true}
+ catch(e){FILES_CLOUD_OK=false;FILES_CLOUD_ERR=(e&&e.message)||String(e);return false}}
+async function fileToCloud(rec,blob){
+ const {c,ws,user}=await filesSession();
+ const ext=((String(rec.name).match(/\.([A-Za-z0-9]{1,8})$/)||[])[1]||'bin').toLowerCase(),path=`${ws}/${user.id}/${rec.id}/file.${ext}`;
+ const up=await c.storage.from('aql-files').upload(path,blob,{contentType:rec.mime||'application/octet-stream',upsert:true});if(up.error)throw up.error;
+ const payload={id:rec.id,name:rec.name,size:rec.size,mime:rec.mime||'',note:rec.note||'',orderNo:rec.orderNo||'',createdAt:rec.createdAt,uploaderName:rec.uploaderName||'',uploaderEmail:user.email||'',path},iso=new Date().toISOString();
+ const r=await c.from('aql_cloud_records').upsert({workspace_id:ws,record_type:'files',record_id:rec.id,payload,updated_at:iso},{onConflict:'workspace_id,record_type,record_id'});
+ if(r.error){try{await c.storage.from('aql-files').remove([path])}catch(e){}throw r.error}
+ rec.cloud={path,at:Date.now()};await DB.put('files',rec);FILES_CLOUD.set(rec.id,{record_id:rec.id,payload,owner_id:user.id,updated_at:iso});await audit('file_uploaded',rec.id,{name:rec.name})}
+async function fileFromCloud(p){const {c}=await filesSession();const d=await c.storage.from('aql-files').download(p.path);if(d.error)throw d.error;return new Blob([d.data],{type:p.mime||d.data.type||'application/octet-stream'})}
+
+function archTabs(cur){const t=(href,k,txt)=>h('a',{href,class:'seg-i'+(cur===k?' on':'')},txt);
+ return h('div',{class:'seg noprint'},t('#/archive','archive','🗂 '+L('Inspections','الفحوصات')),t('#/files','files','📎 '+L('Files','الملفات')))}
+
+function vFiles(){
+ const F={q:'',st:'',by:''},box=h('div',{class:'list'}),msg=h('p',{class:'hint cloud-msg'}),sum=h('p',{class:'hint'});let rows=[],bulkBtn=null;
+ const say=(en,ar)=>{msg.textContent=L(en,ar)},sayErr=e=>{msg.textContent=L('Error: ','خطأ: ')+((e&&e.message)||e)};
+ const guard=async(b,fn)=>{const t=b&&b.textContent;if(b)b.disabled=true;try{await fn()}catch(e){sayErr(e)}finally{if(b){b.disabled=false;if(t)b.textContent=t}}};
+ const dtf=ts=>ts?new Date(ts).toLocaleString(S.lang==='ar'?'ar-EG':'en-GB',{dateStyle:'medium',timeStyle:'short'}):'';
+ const blobOf=async r=>{if(r.loc){const d=await DB.get('filedata',r.id);if(d&&d.blob)return d.blob}if(r.cl)return await fileFromCloud(r.cl.payload);throw new Error(L('File not found.','لم يُعثر على الملف.'))};
+ const load=async force=>{if(force)await filesCloudRefresh(true);else await filesCloudRefresh(false);
+  const locals=await DB.all('files'),m=new Map();
+  locals.forEach(f=>m.set(f.id,{id:f.id,loc:f,cl:FILES_CLOUD.get(f.id)||null,m:f}));
+  FILES_CLOUD.forEach((x,id)=>{if(!m.has(id))m.set(id,{id,loc:null,cl:x,m:x.payload||{}})});
+  rows=[...m.values()].map(r=>({...r,state:r.loc&&r.cl?'both':r.loc?'dev':'cloud'}));
+  if(!isMgr())rows=rows.filter(r=>r.loc||(r.cl&&r.cl.owner_id===CLOUD_UID));
+  fill()};
+ FILES_HOOK=()=>{if(document.body.contains(box))load(true);else FILES_HOOK=null};
+ const openF=async r=>{const w=window.open('','_blank');try{const b=await blobOf(r),u=URL.createObjectURL(new Blob([b],{type:r.m.mime||b.type}));if(w)w.location.href=u;else cmpSaveBlob(b,r.m.name);setTimeout(()=>URL.revokeObjectURL(u),60000)}catch(e){if(w)w.close();throw e}};
+ const dlF=async r=>{cmpSaveBlob(await blobOf(r),r.m.name)};
+ const upF=async r=>{const b=await blobOf(r);await fileToCloud(r.loc,b);say('Uploaded to the cloud: '+r.m.name,'تم الرفع للسحابة: '+r.m.name)};
+ const keepF=async r=>{const b=await blobOf(r),p=r.cl.payload,rec={id:p.id,name:p.name,size:p.size||b.size,mime:p.mime||'',note:p.note||'',orderNo:p.orderNo||'',createdAt:p.createdAt||Date.now(),updatedAt:Date.now(),createdBy:'',uploaderName:p.uploaderName||'',cloud:{path:p.path,at:Date.now()}};
+  await DB.put('files',rec);await DB.put('filedata',{id:rec.id,blob:b});say('Saved to this device\'s archive.','تم الحفظ في أرشيف هذا الجهاز.')};
+ const delLoc=async r=>{if(!confirm(L('Remove this file from this device? '+(r.cl?'The cloud copy stays.':'It is NOT in the cloud, so it will be lost.'),'مسح الملف من هذا الجهاز؟ '+(r.cl?'نسخة السحابة تبقى.':'الملف ليس في السحابة وسيُفقد نهائياً.'))))return;
+  await DB.del('files',r.id);await DB.del('filedata',r.id);await audit('file_removed_local',r.id,{name:r.m.name});say('Removed from this device.','تم المسح من الجهاز.')};
+ const delCl=async r=>{if(!confirm(L('Delete this file from the cloud for everyone? This cannot be undone.','حذف الملف من السحابة للجميع؟ لا يمكن التراجع.')))return;
+  const {c,ws}=await filesSession();const d=await c.from('aql_cloud_records').delete().eq('workspace_id',ws).eq('record_type','files').eq('record_id',r.id).select('record_id');
+  if(d.error)throw d.error;if(!d.data||!d.data.length)throw new Error(L('You are not allowed to delete this file.','غير مسموح لك بحذف هذا الملف.'));
+  try{await c.storage.from('aql-files').remove([r.cl.payload.path])}catch(e){}
+  FILES_CLOUD.delete(r.id);if(r.loc){r.loc.cloud=null;await DB.put('files',r.loc)}await audit('file_deleted_cloud',r.id,{name:r.m.name});say('Deleted from the cloud.','تم الحذف من السحابة.')};
+ const act=(fn)=>e=>{e.stopPropagation();guard(e.currentTarget,async()=>{await fn();await load(false)})};
+ const fill=()=>{const q=norm(F.q);
+  const list=rows.filter(r=>{const m=r.m;return(!q||norm((m.name||'')+(m.orderNo||'')+(m.note||'')+(m.uploaderName||'')).includes(q))&&(!F.st||r.state===F.st)&&(!F.by||m.uploaderName===F.by)}).sort((a,b)=>(b.m.createdAt||0)-(a.m.createdAt||0));
+  const pend=rows.filter(r=>r.state==='dev').length;
+  sum.textContent=L(rows.length+' file(s) · '+pend+' not in the cloud yet',rows.length+' ملف · '+pend+' لم يُرفع للسحابة بعد')+(FILES_CLOUD_OK?'':' · '+L('cloud not connected','السحابة غير متصلة')+(FILES_CLOUD_ERR?' ('+FILES_CLOUD_ERR+')':''));
+  if(bulkBtn){bulkBtn.style.display=pend?'':'none';bulkBtn.textContent='☁️ '+L('Upload all not-in-cloud ('+pend+')','رفع كل ما ليس في السحابة ('+pend+')')}
+  const canDelCl=r=>r.cl&&(isMgr()||r.cl.owner_id===CLOUD_UID);
+  const stB=r=>h('span',{class:'badge '+(r.state==='dev'?'pending_review':'approved')},r.state==='both'?'☁️ '+L('In cloud + device','في السحابة وعلى الجهاز'):r.state==='dev'?'📱 '+L('Device only','على الجهاز فقط'):'☁️ '+L('Cloud only','في السحابة فقط'));
+  box.replaceChildren(...(list.length?list.map(r=>{const m=r.m,meta=[fmtSize(m.size),dtf(m.createdAt),(isMgr()||m.uploaderName!==(S.me&&S.me.name))&&m.uploaderName?'👤 '+m.uploaderName:'',m.orderNo?L('Order ','طلبية ')+m.orderNo:''].filter(Boolean).join(' · ');
+   return h('div',{class:'card frow'},h('div',{class:'fmain'},h('span',{class:'ficon'},fileIcon(m)),h('div',{style:'min-width:0;flex:1'},h('b',{class:'fname'},m.name||'—'),h('div',{class:'hint'},meta),m.note?h('div',{class:'hint'},'📝 '+m.note):null)),stB(r),
+    h('div',{class:'fbtns'},
+     fileViewable(m)?h('button',{type:'button',class:'btn s',onClick:act(()=>openF(r))},'👁 '+L('Open','فتح')):null,
+     h('button',{type:'button',class:'btn s',onClick:act(()=>dlF(r))},'⬇ '+L('Download','تنزيل')),
+     r.state==='dev'?h('button',{type:'button',class:'btn s p',onClick:act(()=>upF(r))},'☁️ '+L('Upload to cloud','رفع للسحابة')):null,
+     r.state==='cloud'?h('button',{type:'button',class:'btn s',onClick:act(()=>keepF(r))},'💾 '+L('Keep on device','حفظ بالأرشيف')):null,
+     r.loc?h('button',{type:'button',class:'btn s d',onClick:act(()=>delLoc(r))},'🗑 '+L('Remove from device','مسح من الجهاز')):null,
+     canDelCl(r)?h('button',{type:'button',class:'btn s d',onClick:act(()=>delCl(r))},'🗑☁️ '+L('Delete from cloud','حذف من السحابة')):null))}):[h('div',{class:'card empty'},h('h2',{},L('No files yet','لا توجد ملفات بعد')),h('p',{class:'hint'},L('Add a file from this device; it is saved in the archive, then you can upload it to the cloud.','أضف ملفاً من الجهاز؛ يُحفظ في الأرشيف ثم تستطيع رفعه للسحابة.')))]))};
+ const order=h('input',{placeholder:L('Order no. (optional)','رقم الطلبية (اختياري)')}),note=h('input',{placeholder:L('Note (optional)','ملاحظة (اختياري)')});
+ const addFiles=async fs=>{if(!fs.length)return;let ok=0,big=0;const added=[];
+  for(const f of fs){if(f.size>FILE_MAX){big++;continue}
+   const buf=await f.arrayBuffer(),blob=new Blob([buf],{type:f.type||'application/octet-stream'}),rec={id:'f_'+Date.now().toString(36)+uid(5),name:f.name,size:f.size,mime:f.type||'',note:note.value.trim(),orderNo:order.value.trim(),createdAt:Date.now(),updatedAt:Date.now(),createdBy:S.me.id,uploaderName:S.me.name,cloud:null};
+   await DB.put('files',rec);await DB.put('filedata',{id:rec.id,blob});await audit('file_added',rec.id,{name:rec.name});added.push({rec,blob});ok++}
+  note.value='';order.value='';let errs=0,first='';
+  if(LS.get(FILES_AUTO_KEY)==='on'&&navigator.onLine)for(const a of added){try{await fileToCloud(a.rec,a.blob)}catch(e){errs++;if(!first)first=(e&&e.message)||String(e)}}
+  say('Added '+ok+' file(s) to the archive.'+(big?' '+big+' skipped (over 50 MB).':'')+(errs?' Cloud upload failed for '+errs+': '+first:''),'تمت إضافة '+ok+' ملف للأرشيف.'+(big?' تم تخطي '+big+' (أكبر من 50MB).':'')+(errs?' فشل الرفع للسحابة لعدد '+errs+': '+first:''));
+  await load(false)};
+ const pick=h('button',{type:'button',class:'btn p',onClick:e=>{const i=document.createElement('input');i.type='file';i.multiple=true;i.onchange=()=>guard(e.currentTarget,()=>addFiles([...i.files]));i.click()}},'📎 '+L('Add files from this device','إضافة ملفات من الجهاز'));
+ bulkBtn=h('button',{type:'button',class:'btn',style:'display:none',onClick:e=>guard(e.currentTarget,async()=>{const todo=rows.filter(r=>r.state==='dev');let n=0,errs=0,first='';
+   for(const r of todo){say('Uploading '+(++n)+' / '+todo.length+'…','جارٍ الرفع '+n+' / '+todo.length+'…');try{await fileToCloud(r.loc,await blobOf(r))}catch(err){errs++;if(!first)first=(err&&err.message)||String(err)}}
+   say('Done. Uploaded '+(todo.length-errs)+' of '+todo.length+'.'+(errs?' First error: '+first:''),'اكتمل. رُفع '+(todo.length-errs)+' من '+todo.length+'.'+(errs?' أول خطأ: '+first:''));await load(true)})},'');
+ const by=isMgr()?h('select',{onChange:e=>{F.by=e.target.value;fill()}},h('option',{value:''},L('All uploaders','كل من رفع')),inspectorList().map(c=>h('option',{value:c},c))):null;
+ setTimeout(()=>load(true),0);
+ return h('div',{class:'stack'},archTabs('files'),
+  h('div',{class:'card form'},h('div',{class:'row wrap'},order,note),h('div',{class:'row wrap'},pick,bulkBtn,h('button',{type:'button',class:'btn',onClick:e=>guard(e.currentTarget,()=>load(true))},'🔄 '+L('Refresh','تحديث'))),
+   h('label',{class:'chk'},h('input',{type:'checkbox',checked:LS.get(FILES_AUTO_KEY)==='on',onChange:e=>LS.set(FILES_AUTO_KEY,e.target.checked?'on':'off')}),L('Upload new files to the cloud automatically','رفع الملفات الجديدة للسحابة تلقائياً')),
+   h('p',{class:'hint'},L('Any file type, up to 50 MB each. Files are stored on this device first; press “Upload to cloud” to send one to the manager’s cloud.','أي نوع ملف حتى 50MB للملف. تُحفظ الملفات على الجهاز أولاً؛ اضغط «رفع للسحابة» لإرسال الملف لسحابة المدير.'))),
+  h('div',{class:'row wrap'},h('input',{placeholder:L('Search name, order, note, uploader','ابحث بالاسم أو الطلبية أو الملاحظة أو من رفع'),onInput:e=>{F.q=e.target.value;fill()}}),
+   h('select',{onChange:e=>{F.st=e.target.value;fill()}},h('option',{value:''},L('All','الكل')),h('option',{value:'dev'},L('Device only','على الجهاز فقط')),h('option',{value:'both'},L('In cloud + device','في السحابة وعلى الجهاز')),h('option',{value:'cloud'},L('Cloud only','في السحابة فقط'))),by),
+  sum,msg,box)}
+
 
 function vSettings(){const s=S.settings;SINGLE.forEach(g=>{s[g]=s[g]||[]});const msg=h('p',{class:'hint'});
   const imgF=(lb,k)=>h('div',{class:'row wrap'},h('b',{style:'flex:1;font-size:14px'},lb),s[k]?h('img',{src:s[k],style:'height:44px'}):null,h('button',{class:'btn s',onClick:()=>pickOne(v=>{s[k]=v;render()})},L('Upload','رفع')),s[k]?h('button',{class:'btn s',onClick:()=>{s[k]='';render()}},'🗑'):null);
@@ -1469,7 +1687,7 @@ let TEAM_P='7';
 const agoTxt=t=>{const m=Math.max(0,Math.round((Date.now()-t)/60000));if(m<1)return L('just now','الآن');if(m<60)return L(m+' min ago','منذ '+m+' دقيقة');const hr=Math.floor(m/60);if(hr<24)return L(hr+' h ago','منذ '+hr+' ساعة');const d=Math.floor(hr/24);return L(d+' d ago','منذ '+d+' يوم')};
 const subAt=i=>{const x=(i.history||[]).filter(e=>e.action==='submit'||String(e.action).startsWith('auto_')).map(e=>+e.at||0);return x.length?Math.max(...x):(+i.updatedAt||+i.createdAt||0)};
 const durTxt=m=>m<60?Math.round(m)+L(' min',' د'):(m/60).toFixed(1)+L(' h',' س');
-const actTxt=a=>({inspection_saved:L('saved a draft','حفظ مسودة'),inspection_submitted:L('submitted for review','أرسل للمراجعة'),inspection_auto_approved:L('accepted automatically (AQL)','قبول تلقائي (AQL)'),inspection_auto_rejected:L('rejected automatically (AQL)','رفض تلقائي (AQL)'),inspection_accept:L('approved','اعتمد'),inspection_reject:L('rejected','رفض'),inspection_return:L('returned for correction','أرجع للتصحيح'),inspection_reopened:L('reopened','أعاد فتح'),defect_created:L('added a defect to the library','أضاف عيباً للمكتبة'),defect_updated:L('edited a library defect','عدّل عيباً في المكتبة'),page_pdf_exported:L('exported a page as PDF','صدّر صفحة PDF')})[a]||String(a).replace(/_/g,' ');
+const actTxt=a=>({inspection_saved:L('saved a draft','حفظ مسودة'),inspection_submitted:L('submitted for review','أرسل للمراجعة'),inspection_auto_approved:L('accepted automatically (AQL)','قبول تلقائي (AQL)'),inspection_auto_rejected:L('rejected automatically (AQL)','رفض تلقائي (AQL)'),inspection_accept:L('approved','اعتمد'),inspection_reject:L('rejected','رفض'),inspection_return:L('returned for correction','أرجع للتصحيح'),inspection_reopened:L('reopened','أعاد فتح'),defect_created:L('added a defect to the library','أضاف عيباً للمكتبة'),defect_updated:L('edited a library defect','عدّل عيباً في المكتبة'),page_pdf_exported:L('exported a page as PDF','صدّر صفحة PDF'),file_added:L('added a file to the archive','أضاف ملفاً للأرشيف'),file_uploaded:L('uploaded a file to the cloud','رفع ملفاً للسحابة'),file_deleted_cloud:L('deleted a file from the cloud','حذف ملفاً من السحابة'),file_removed_local:L('removed a file from the device','مسح ملفاً من الجهاز')})[a]||String(a).replace(/_/g,' ');
 function vReviewQueue(){const q=S.ins.filter(i=>i.status==='pending_review').sort((a,b)=>subAt(a)-subAt(b));
  return h('div',{class:'card'},h('div',{class:'row wrap',style:'justify-content:space-between'},h('h3',{style:'margin:0'},'📝 '+L('Awaiting your review','بانتظار مراجعتك')),h('span',{class:'badge pending_review'},q.length)),
   q.length?h('div',{class:'list',style:'margin-top:10px'},q.map(i=>{const late=Date.now()-subAt(i)>864e5;
