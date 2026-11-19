@@ -86,7 +86,7 @@ document.addEventListener('click',e=>{const a=e.target.closest&&e.target.closest
 function newIns(){return{id:insId(),createdAt:Date.now(),status:'draft',orderNo:'',customer:'',model:'',color:'',garmentType:'jacket',orderQty:'',lotSize:'',sampleSize:'',date:nowLocal(),notes:'',comment:'',poCustomer:'',item:'',style:'',salesOrder:'',actualQty:'',packingPct:'',startCode:'',endCode:'',rows:[],props:{},secs:{},defs:[],itemPhotos:[],defPhotos:[],measOn:false,meas:{},measSamples:'',measSizes:'',createdBy:S.me?S.me.id:'',inspectorName:S.me?S.me.name:'',result:null,decisionNote:'',aql:null,history:[]}}
 const MGRNAV=['#/','#/aql','#/settings','#/monthly','#/compare'],isMgr=()=>!!(S.me&&S.me.role==='manager'),mine=i=>!!S.me&&(i.createdBy===S.me.id||i.inspectorName===S.me.name);
 async function route(){const parts=ROUTE.split('/');const a=parts[1]||'',b=parts.slice(2).join('/');
-  if(S.me&&!isMgr()&&['','aql','settings','compare'].includes(a)){ROUTE='#/new';return route()}
+  if(S.me&&!isMgr()&&['','aql','settings','compare','monthly'].includes(a)){ROUTE='#/new';return route()}
   if(a==='new'){D=newIns();dirty=false;errs=[];okMsg=''}
   else if(a==='i'){const f=S.ins.find(i=>i.id===b);D=f&&(isMgr()||mine(f))?structuredClone(f):null;if(D&&D.garmentType==='both')D.garmentType='suit';dirty=false;errs=[];okMsg='';DN=''}
   render()}
@@ -141,7 +141,7 @@ function render(){document.documentElement.lang=S.lang;document.documentElement.
   const v=({'':vPanel,new:vIns,i:vIns,archive:()=>vList(false),reports:()=>vList(true),charts:vCharts,monthly:vMonthly,compare:vCompare,library:vLib,aql:vAql,settings:vSettings,report:vReport})[hash.split('/')[1]||'']||vDash;
   $('#app').replaceChildren(h('div',{class:'shell'},
     h('aside',{class:'side'},h('div',{class:'brand'},h('div',{class:'brand-wordmark',dir:'ltr'},h('img',{src:'./icons/meyar-192.png',alt:'M'}),h('b',{},'EYAR')),h('small',{},fac)),navs.map(link),h('div',{style:'margin-top:auto;display:grid;gap:8px'},themeButton(),h('small',{style:'color:#8fa6bb;padding:0 8px'},S.me.name+' · '+(isMgr()?L('Manager','مدير'):L('Inspector','مفتش'))),sw,outBtn)),
-    h('div',{class:'main'},h('header',{class:'top'},h('button',{class:'menu-toggle',type:'button','aria-label':'Open navigation',onClick:()=>{const m=$('#top-menu');if(m)m.classList.toggle('open')}},'☰'),h('div',{class:'top-brand',dir:'ltr'},h('img',{src:'./icons/meyar-192.png',alt:'M'}),h('span',{},'EYAR')),h('h1',{},L(curNav[2],curNav[3])),h('span',{id:'autosave-status',class:'autosave-status'},dirty?L('Unsaved changes','تغييرات غير محفوظة'):L('Saved','تم الحفظ')),h('span',{style:'display:flex;gap:6px'},sw,outBtn)),h('nav',{id:'top-menu',class:'top-menu'},[...navs.map(link),h('div',{class:'menu-theme'},themeButton())]),h('main',{id:'view'},v()))));
+    h('div',{class:'main'},h('header',{class:'top'},h('button',{class:'menu-toggle',type:'button','aria-label':'Open navigation',onClick:()=>{const m=$('#top-menu');if(m)m.classList.toggle('open')}},'☰'),h('div',{class:'top-brand',dir:'ltr'},h('img',{src:'./icons/meyar-192.png',alt:'M'}),h('span',{},'EYAR')),h('h1',{},L(curNav[2],curNav[3])),h('span',{id:'autosave-status',class:'autosave-status'},dirty?L('Unsaved changes','تغييرات غير محفوظة'):L('Saved','تم الحفظ')),h('span',{style:'display:flex;gap:6px'},sw,outBtn)),h('nav',{id:'top-menu',class:'top-menu'},[...navs.map(link),h('div',{class:'menu-theme'},themeButton())]),h('main',{id:'view'},pagePdfBar(),v()))));
   scrollTo(0,y)}
 /* ---------- dashboard ---------- */
 function vDash(){const done=S.ins.filter(i=>['approved','rejected'].includes(i.status));const c=s=>S.ins.filter(i=>s.includes(i.status)).length;const defs=done.flatMap(i=>i.defs||[]);const sum=k=>defs.reduce((a,d)=>a+num(d[k]),0);
@@ -657,7 +657,7 @@ async function save(kind){if(busy)return;if(EDIT.includes(D.status))syncDerived(
   try{const gs=garments();D.defs=D.defs.filter(d=>gs.includes(d.garment)).map(d=>{const x={...d};delete x._open;return x});
     const started=D.defs.length>0||(D.defPhotos||[]).length>0||(D.itemPhotos||[]).length>0;
     D.status=kind==='submit'?'pending_review':started?'in_progress':'draft';D.aql=liveSnap();let auto=false;
-    if(kind==='submit'&&D.aql&&D.aql.authoritative&&D.aql.result){auto=true;D.status=D.aql.result==='pass'?'approved':'rejected';D.result=D.aql.result==='pass'?'accepted':'rejected';D.decisionNote='';D.history.push({at:Date.now(),by:'AQL',action:'auto_'+D.status})}
+    if(kind==='submit'&&!(S.settings&&S.settings.requireReview)&&D.aql&&D.aql.authoritative&&D.aql.result){auto=true;D.status=D.aql.result==='pass'?'approved':'rejected';D.result=D.aql.result==='pass'?'accepted':'rejected';D.decisionNote='';D.history.push({at:Date.now(),by:'AQL',action:'auto_'+D.status})}
     D.round=parseInt(D.round,10)>0?parseInt(D.round,10):'';
     D.updatedAt=Date.now();D.history.push({at:Date.now(),by:D.inspectorName,action:kind});await DB.put('inspections',D);await audit(auto?'inspection_auto_'+D.status:kind==='submit'?'inspection_submitted':'inspection_saved',D.id,{status:D.status});dirty=false;await loadAll();
     if(auto){alert(L('AQL result: ','نتيجة AQL: ')+(D.result==='accepted'?L('ACCEPTED','مقبول'):L('REJECTED','مرفوض')));go('#/report/'+D.id)}
@@ -956,6 +956,7 @@ function vSettings(){const s=S.settings;SINGLE.forEach(g=>{s[g]=s[g]||[]});const
       h('button',{class:'btn s',onClick:()=>{if(i>0){[s[g][i-1],s[g][i]]=[s[g][i],s[g][i-1]];render()}}},'↑'),h('button',{class:'btn s',onClick:()=>{if(i<s[g].length-1){[s[g][i+1],s[g][i]]=[s[g][i],s[g][i+1]];render()}}},'↓'))),
     h('button',{class:'btn s',onClick:()=>{s[g].push({id:'d_'+uid(6),en:'',ar:'',active:true});render()}},'+ '+L('Add department','إضافة قسم')));
   return h('div',{class:'stack'},h('div',{class:'card form'},fld(L('Platform name','اسم المنصة'),()=>s.platformName,v=>s.platformName=v),fld(L('Factory name (report templates)','اسم المصنع (قوالب التقارير)'),()=>s.factoryName,v=>s.factoryName=v),h('label',{},L('Jacket measurement points (one per line)','نقاط قياس الجاكيت (نقطة في كل سطر)'),h('textarea',{onInput:e=>{s.measPoints=Object.assign({},s.measPoints||{}, {jacket:e.target.value.split('\n').map(x=>x.trim()).filter(Boolean)})}},((s.measPoints&&s.measPoints.jacket)||MEASP.jacket).join('\n'))),h('label',{},L('Trousers measurement points (one per line)','نقاط قياس البنطلون (نقطة في كل سطر)'),h('textarea',{onInput:e=>{s.measPoints=Object.assign({},s.measPoints||{}, {trousers:e.target.value.split('\n').map(x=>x.trim()).filter(Boolean)})}},((s.measPoints&&s.measPoints.trousers)||MEASP.trousers).join('\n'))),fld(L('Minimum pages for "Photos of Defects" (0-6)','أقل عدد صفحات لـ«صور العيوب» (0-6)'),()=>String(s.minDefPages??2),v=>{s.minDefPages=Math.max(0,Math.min(6,Math.round(num(v))))},{type:'number',min:0,max:6}),fld(L('Minimum pages for "Actual Item" photos (0-6)','أقل عدد صفحات لـ«صور المنتج الفعلي» (0-6)'),()=>String(s.minItemPages??0),v=>{s.minItemPages=Math.max(0,Math.min(6,Math.round(num(v))))},{type:'number',min:0,max:6}),fld(L('Company shown under "From" on the report','الجهة المعروضة في خانة «من» بالتقرير'),()=>s.fromText||'',v=>s.fromText=v,{placeholder:s.factoryName}),imgF(L('Report logo','لوجو التقرير'),'logo'),imgF(L('Inspector picture on report','صورة المفتش بالتقرير'),'avatar'),
+      h('div',{class:'card form',style:'margin-top:12px'},h('h3',{},L('Review policy','سياسة المراجعة')),h('label',{class:'chk'},h('input',{type:'checkbox',checked:!!s.requireReview,onChange:e=>s.requireReview=e.target.checked}),L('Manager must approve every inspection, even when AQL gives an automatic result','المدير يعتمد كل فحص، حتى لو أعطت AQL نتيجة تلقائية'))),
       h('div',{class:'card form',style:'margin-top:12px'},h('h3',{},L('Photo timestamp','طابع التاريخ والوقت على الصور')),
         h('label',{class:'chk'},h('input',{type:'checkbox',checked:s.photoStampEnabled!==false,onChange:e=>s.photoStampEnabled=e.target.checked}),L('Burn timestamp into the image permanently','حفظ الطابع داخل الصورة نفسها بشكل دائم')),
         h('label',{},L('Date and time format','صيغة التاريخ والوقت'),h('select',{value:s.photoStampFormat||'eu',onChange:e=>s.photoStampFormat=e.target.value},h('option',{value:'eu'},'DD/MM/YYYY  HH:MM'),h('option',{value:'us'},'MM/DD/YYYY  HH:MM'),h('option',{value:'iso'},'YYYY-MM-DD  HH:MM'))),
@@ -984,7 +985,7 @@ const measKinds=t=>t==='suit'||t==='both'?['trousers','jacket']:(t==='jacket'||t
 const measPts=k=>((S.settings.measPoints&&S.settings.measPoints[k])||MEASP[k]).filter(Boolean);
 const newBlock=k=>({heads:['','','',''],rows:measPts(k).map(n=>({name:n,tp:'',tm:'',c:Array(15).fill('')}))});
 function ensureMeas(o){o.meas=o.meas||{};measKinds(o.garmentType).forEach(k=>{if(!o.meas[k]||!o.meas[k].length)o.meas[k]=Array.from({length:MEASB[k]},()=>newBlock(k))})}
-const hbwBox=rows=>h('table',{class:'hbwt'},rows.map(([a,b])=>h('tr',{},h('td',{class:'l'},a),h('td',{class:'v'},b==null?'':b))));
+const hbwBox=rows=>h('table',{class:'hbwt'},rows.map(([a,b])=>h('tr',{},h('td',{class:'l'},a),h('td',{class:'v'+((typeof b==='string'||typeof b==='number')&&String(b).length>11?' sm':'')},b==null?'':b))));
 const autoSizes=i=>{const z=new Set((i.rows||[]).map(r=>String(r.size||'').trim()).filter(Boolean));return z.size?String(z.size):''};
 function measHdr(i,ed,dt){const sam=ed?h('input',{value:i.measSamples||'',onInput:e=>{i.measSamples=e.target.value;dt()}}):i.measSamples,siz=ed?h('input',{value:i.measSizes||autoSizes(i),onInput:e=>{i.measSizes=e.target.value;dt()}}):(i.measSizes||autoSizes(i));
   return h('div',{class:'mhr'},hbwBox([[L('Customer','العميل'),i.customer],[L('Po Customer','PO العميل'),i.poCustomer],[L('Model','الموديل'),i.model]]),
@@ -1203,7 +1204,7 @@ function reportPages(i,ed){
   const rows=Object.values(by),tot=c=>rows.reduce((a,r)=>a+r[c],0),NR=Math.max(15,rows.length+1);
   const decided=['approved','rejected'].includes(i.status),out=decided?(i.result==='accepted'?'pass':'fail'):(ed&&A&&A.result?A.result:'pending');
   const hv=(k,v,at,rr)=>ed?ed.inp(k,at,rr):v;
-  const hb=r=>h('div',{class:'hb'},r.map(([k,v])=>h('div',{},h('b',{},k),h('span',{},v==null?'':v))));
+  const hb=(r,c)=>h('div',{class:'hb'+(c?' '+c:'')},r.map(([k,v])=>h('div',{},h('b',{},k),h('span',{},v==null?'':v))));
   const packing=i.packingPct?(String(i.packingPct).includes('%')?i.packingPct:i.packingPct+'%'):'';
   const smp=A?A.sampleSize:(i.sampleSize||'');
   const nz=v=>(v===0||v==='0')?'0':v;
@@ -1232,7 +1233,7 @@ function reportPages(i,ed){
     h('div',{class:'hrow'},hb([[L('Customer','العميل'),hv('customer',i.customer,{list:'dl-customers',autocomplete:'off'})],[L('Po Customer','PO العميل'),hv('poCustomer',i.poCustomer,{},true)],[L('Model','الموديل'),hv('model',i.model)]]),
       hb([[L('Item','الصنف'),(ed?ed.item():gName(i.garmentType).toUpperCase())],[L('Style','الستايل'),hv('style',i.style)],[L('Sales order','أمر البيع'),hv('salesOrder',i.salesOrder)]]),
       hb([[L('Quantity','الكمية'),hv('orderQty',i.orderQty,{type:'number',min:0},true)],[L('Actual quantity','الكمية الفعلية'),hv('actualQty',i.actualQty,{type:'number',min:0},true)],[L('Packing','التعبئة'),ed?h('span',{'data-live':'pk'},pack(i)):pack(i)]]),
-      hb([[L('Date','التاريخ'),hv('date',fmtDate(i.date),{type:'datetime-local'})],[L('Inspection No.','عدد الفحص'),ed?ed.sel('round',RND_OPTS()):optTxt(RND_OPTS(),i.round)],[L('Inspection Type','نوع الفحص'),ed?ed.sel('inspType',TYPE_OPTS()):optTxt(TYPE_OPTS(),i.inspType)]])),
+      hb([[L('Date','التاريخ'),hv('date',fmtDate(i.date),{type:'datetime-local'})],[L('Inspection No.','عدد الفحص'),ed?ed.sel('round',RND_OPTS()):optTxt(RND_OPTS(),i.round)],[L('Inspection Type','نوع الفحص'),ed?ed.sel('inspType',TYPE_OPTS()):optTxt(TYPE_OPTS(),i.inspType)]],'hbred')),
     ed?[h('div',{class:'bar1'},'• '+L('Order & Sampling','الطلبية والعينة')),ed.basics()]:null,
     h('div',{class:'bar1'},'• '+L('Inspection Procedure & Results','إجراء الفحص والنتائج')),procBlock,
     h('div',{class:'two2',style:'margin-top:20px'},
@@ -1284,13 +1285,14 @@ async function makeXlsx(i){
   H(4,22);M(1,4,18,4,L('INSPECTION REPORT','تقرير الفحص'),{size:14});H(5,6);
   /* header boxes (rows 6-8) */
   [6,7,8].forEach(r=>H(r,16));
+  const labR=(c1,c2,r,t)=>M(c1,r,c2,r,t,{fill:'C62828',color:W}),vlR=(c1,c2,r,v,o)=>M(c1,r,c2,r,v,Object.assign({fill:'C62828',color:W,h:'right',shrink:true},o||{}));
   const lab=(c1,c2,r,t)=>M(c1,r,c2,r,t,{fill:DK,color:W}),vl=(c1,c2,r,v,o)=>M(c1,r,c2,r,v,Object.assign({fill:DK,color:W,h:'right',shrink:true},o||{}));
   lab(1,2,6,L('Customer','العميل'));vl(3,5,6,i.customer);lab(1,2,7,L('Po Customer','PO العميل'));vl(3,5,7,i.poCustomer);lab(1,2,8,L('Model','الموديل'));vl(3,5,8,i.model);
   lab(7,8,6,L('Item','الصنف'));vl(9,10,6,gName(i.garmentType).toUpperCase());lab(7,8,7,L('Style','الستايل'));vl(9,10,7,i.style);lab(7,8,8,L('Sales order','أمر البيع'));vl(9,10,8,i.salesOrder);
   lab(12,13,6,L('Quantity','الكمية'));vl(14,14,6,num(i.orderQty)||null,{h:'center'});lab(12,13,7,L('Actual quantity','الكمية الفعلية'));vl(14,14,7,num(i.actualQty)||null,{h:'center'});
   lab(12,13,8,L('Packing','التعبئة'));const pk=num(i.orderQty)>0&&num(i.actualQty)>0?num(i.actualQty)/num(i.orderQty):'';
   vl(14,14,8,{formula:'IF(N6=0,"",N7/N6)',result:pk},{h:'center',nf:'0%'});
-  lab(16,16,6,L('Date','التاريخ'));vl(17,18,6,fmtDate(i.date));lab(16,16,7,L('Inspection No.','عدد الفحص'));vl(17,18,7,optTxt(RND_OPTS(),i.round),{h:'center'});lab(16,16,8,L('Inspection Type','نوع الفحص'));vl(17,18,8,optTxt(TYPE_OPTS(),i.inspType),{h:'center'});
+  labR(16,16,6,L('Date','التاريخ'));vlR(17,18,6,fmtDate(i.date));labR(16,16,7,L('Inspection No.','عدد الفحص'));vlR(17,18,7,optTxt(RND_OPTS(),i.round),{h:'center'});labR(16,16,8,L('Inspection Type','نوع الفحص'));vlR(17,18,8,optTxt(TYPE_OPTS(),i.inspType),{h:'center'});
   H(9,6);H(10,22);M(1,10,18,10,'• '+L('Inspection Procedure & Results','إجراء الفحص والنتائج'),{fill:BL,color:W,size:12,h:'center'});H(11,6);
   /* procedure block (rows 12-17) */
   for(let r=12;r<=17;r++)H(r,16);
@@ -1374,6 +1376,37 @@ async function makeXlsx(i){
   ws.pageSetup={paperSize:9,orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:0,horizontalCentered:true,margins:{left:.4,right:.4,top:.4,bottom:.4,header:.2,footer:.2},printArea:`A1:R${last}`};
   const buf=await wb.xlsx.writeBuffer();return new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})}
 
+/* ---------- A4 PDF export for any data page (added 19 Nov 2026) ---------- */
+const PAGE_PDF_ROUTES=['','archive','reports','library','aql'];
+function pagePdfBar(){const a=ROUTE.split('/')[1]||'';if(!PAGE_PDF_ROUTES.includes(a))return null;const nav=NAV.find(n=>n[0]==='#/'+a)||NAV[0];
+ return h('div',{class:'noprint',style:'margin-bottom:10px'},h('button',{type:'button',class:'btn s',onClick:e=>pageToPdf(e.currentTarget,L(nav[2],nav[3]),nav[2])},'⬇ '+L('Export PDF (A4)','تصدير PDF (A4)')))}
+async function pageToPdf(btn,title,en){const t=btn.textContent;btn.disabled=true;btn.textContent=L('Preparing…','جارٍ التجهيز…');
+ try{const d=new Date(),p=n=>String(n).padStart(2,'0');const blob=await makePagePdf(title);cmpSaveBlob(blob,`${en.replace(/[^\w]+/g,'-')}-${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}.pdf`);await audit('page_pdf_exported',null,{page:en})}
+ catch(e){alert(L('Export failed: ','فشل التصدير: ')+(e&&e.message||e))}finally{btn.disabled=false;btn.textContent=t}}
+async function makePagePdf(title){
+ if(!window.jspdf||!window.html2canvas)throw new Error('PDF library missing');
+ const view=document.getElementById('view');if(!view)throw new Error('Nothing to export');
+ try{await document.fonts.ready}catch(e){}
+ const scale=Math.max(.8,Math.min(2,26000/Math.max(1,view.scrollHeight)));let cuts=[],cssW=794;
+ const canvas=await window.html2canvas(view,{scale,backgroundColor:'#ffffff',useCORS:true,logging:false,windowWidth:794,
+  onclone:(doc)=>{const v=doc.getElementById('view');if(!v)return;
+   doc.querySelectorAll('.noprint,button,.btn,input[type=file]').forEach(n=>n.remove());
+   doc.querySelectorAll('input,textarea').forEach(n=>{if(!n.value&&n.type!=='checkbox'&&n.type!=='radio')n.remove()});doc.querySelectorAll('select').forEach(n=>{if(n.selectedIndex<=0)n.remove()});
+   const d=new Date(),logo=h('img',{class:'rlogo',src:S.settings.logo||DEF_LOGO});
+   const factoryWords=String(S.settings.factoryName||'').toUpperCase().split(/\s+/).filter(Boolean);
+   const factoryHeader=h('div',{class:'rlh',style:'margin-bottom:8px'},logo,h('div',{class:'rlogotxt'},factoryWords.map(w=>h('div',{},w))));
+   const reportMeta=h('div',{style:'border-bottom:2px solid #0e7490;padding:0 0 8px;margin:0 0 12px'},h('div',{style:'font-weight:800;font-size:15px'},title),h('div',{style:'font-size:11px;color:#555;margin-top:3px'},d.toLocaleDateString()+' '+d.toLocaleTimeString().slice(0,5)));
+   v.prepend(factoryHeader,reportMeta);
+   v.style.background='#fff';v.style.padding='14px';v.style.maxWidth='none';v.style.width='794px';v.style.boxSizing='border-box';
+   const top=v.getBoundingClientRect().top;cssW=v.getBoundingClientRect().width||794;
+   cuts=[...v.querySelectorAll(':scope > *, .stack > *, .list > *, .card, tbody > tr, .item, .item2, .grid > *')].map(n=>Math.round(n.getBoundingClientRect().bottom-top)).filter(y=>y>0);}});
+ const W=canvas.width,H=canvas.height,pageH=Math.floor(W*277/190),cs=[...new Set(cuts.map(y=>Math.round(y*scale)))].sort((a,b)=>a-b);
+ const pdf=new window.jspdf.jsPDF({unit:'mm',format:'a4',orientation:'portrait',compress:true}),ranges=[];let s=0;
+ while(s<H-2){let e=Math.min(H,s+pageH);if(e<H){const c=cs.filter(y=>y>s+pageH*.5&&y<=e).pop();if(c)e=c}ranges.push([s,e]);s=e}
+ ranges.forEach(([a,b],k)=>{const sl=document.createElement('canvas');sl.width=W;sl.height=b-a;const x=sl.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,W,b-a);x.drawImage(canvas,0,a,W,b-a,0,0,W,b-a);
+  if(k)pdf.addPage();pdf.addImage(sl.toDataURL('image/jpeg',.92),'JPEG',10,10,190,(b-a)*190/W,undefined,'FAST');pdf.setFontSize(8);pdf.setTextColor(120);pdf.text((k+1)+' / '+ranges.length,105,291,{align:'center'})});
+ return pdf.output('blob')}
+
 async function makePdf(i){if(!window.jspdf||!window.html2canvas)throw new Error('PDF library missing');
   const pdf=new window.jspdf.jsPDF({unit:'mm',format:'a4',orientation:'portrait',compress:true});const stage=h('div',{class:'stage',style:'position:fixed;left:-12000px;top:0;width:794px'});document.body.append(stage);
   try{const pages=reportPages(i);for(let k=0;k<pages.length;k++){stage.replaceChildren(pages[k]);try{await document.fonts.load("700 12px CalibriX");await document.fonts.load("400 12px CalibriX");await document.fonts.ready}catch(e){}await new Promise(r=>setTimeout(r,80));
@@ -1431,7 +1464,41 @@ function vCustomers(){const inp=h('input',{placeholder:L('New customer name','ا
   return h('div',{class:'card form'},h('h3',{},L('Customers','العملاء')),h('p',{class:'hint'},L('These names appear as suggestions in the Customer field. Customers from saved inspections are added automatically.','تظهر هذه الأسماء كاقتراحات في خانة العميل. عملاء الفحوصات المحفوظة تُضاف تلقائياً.')),
     h('div',{class:'row wrap'},customerList().map(c=>h('span',{class:'badge'},c+' ',S.lists.customers.includes(c)?h('a',{href:'#',onClick:async e=>{e.preventDefault();S.lists.customers=S.lists.customers.filter(x=>x!==c);await DB.put('kv',S.lists);render()}},'×'):null))),
     h('div',{class:'row'},inp,h('button',{class:'btn p',onClick:async()=>{const v=inp.value.trim();if(v&&!customerList().some(c=>norm(c)===norm(v))){S.lists.customers.push(v);await DB.put('kv',S.lists);render()}}},L('Add','إضافة'))))}
-function vPanel(){return h('div',{class:'stack'},vDash(),vMembers(),vCustomers())}
+/* ---------- team follow-up: review queue, per-inspector performance, activity feed (manager panel) ---------- */
+let TEAM_P='7';
+const agoTxt=t=>{const m=Math.max(0,Math.round((Date.now()-t)/60000));if(m<1)return L('just now','الآن');if(m<60)return L(m+' min ago','منذ '+m+' دقيقة');const hr=Math.floor(m/60);if(hr<24)return L(hr+' h ago','منذ '+hr+' ساعة');const d=Math.floor(hr/24);return L(d+' d ago','منذ '+d+' يوم')};
+const subAt=i=>{const x=(i.history||[]).filter(e=>e.action==='submit'||String(e.action).startsWith('auto_')).map(e=>+e.at||0);return x.length?Math.max(...x):(+i.updatedAt||+i.createdAt||0)};
+const durTxt=m=>m<60?Math.round(m)+L(' min',' د'):(m/60).toFixed(1)+L(' h',' س');
+const actTxt=a=>({inspection_saved:L('saved a draft','حفظ مسودة'),inspection_submitted:L('submitted for review','أرسل للمراجعة'),inspection_auto_approved:L('accepted automatically (AQL)','قبول تلقائي (AQL)'),inspection_auto_rejected:L('rejected automatically (AQL)','رفض تلقائي (AQL)'),inspection_accept:L('approved','اعتمد'),inspection_reject:L('rejected','رفض'),inspection_return:L('returned for correction','أرجع للتصحيح'),inspection_reopened:L('reopened','أعاد فتح'),defect_created:L('added a defect to the library','أضاف عيباً للمكتبة'),defect_updated:L('edited a library defect','عدّل عيباً في المكتبة'),page_pdf_exported:L('exported a page as PDF','صدّر صفحة PDF')})[a]||String(a).replace(/_/g,' ');
+function vReviewQueue(){const q=S.ins.filter(i=>i.status==='pending_review').sort((a,b)=>subAt(a)-subAt(b));
+ return h('div',{class:'card'},h('div',{class:'row wrap',style:'justify-content:space-between'},h('h3',{style:'margin:0'},'📝 '+L('Awaiting your review','بانتظار مراجعتك')),h('span',{class:'badge pending_review'},q.length)),
+  q.length?h('div',{class:'list',style:'margin-top:10px'},q.map(i=>{const late=Date.now()-subAt(i)>864e5;
+    return h('div',{class:'item2',style:'display:flex;gap:10px;align-items:center;justify-content:space-between'},
+     h('div',{style:'min-width:0'},h('b',{},i.id),' · '+(i.orderNo||''),h('div',{class:'hint'},[i.customer,i.model,i.inspectorName].filter(Boolean).join(' · ')),
+      h('div',{class:'hint',style:late?'color:#b42318;font-weight:700':''},'⏱ '+agoTxt(subAt(i))),
+      i.aql&&i.aql.result?h('span',{class:'badge '+(i.aql.result==='pass'?'pass':'fail')},'AQL: '+(i.aql.result==='pass'?L('pass','مقبول'):L('fail','مرفوض'))):null),
+     h('button',{type:'button',class:'btn s',onClick:()=>go('#/i/'+i.id)},L('Review','مراجعة')))})):h('p',{class:'hint',style:'margin:8px 0 0'},'✅ '+L('Nothing is waiting for review.','لا توجد فحوصات بانتظار المراجعة.')))}
+function vTeam(){
+ const from=(()=>{const n=new Date();if(TEAM_P==='1'){n.setHours(0,0,0,0);return +n}if(TEAM_P==='all')return 0;return Date.now()-(+TEAM_P)*864e5})();
+ const B=new Map(),bucket=n=>{n=n||L('Unspecified','غير محدد');if(!B.has(n))B.set(n,{n,tot:0,ok:0,bad:0,ret:0,defs:0,mins:[],last:0,open:0});return B.get(n)};
+ S.ins.forEach(i=>{const b=bucket(i.inspectorName),sa=subAt(i);
+  if(['draft','in_progress'].includes(i.status))b.open++;
+  else if(sa>=from){b.tot++;if(i.status==='approved')b.ok++;if(i.status==='rejected')b.bad++;b.defs+=(i.defs||[]).reduce((a,d)=>a+num(d.occurrences),0);const m=i.createdAt?Math.round((sa-i.createdAt)/60000):0;if(m>0&&m<1440)b.mins.push(m)}
+  b.ret+=(i.history||[]).filter(e=>e.action==='return'&&(+e.at||0)>=from).length;b.last=Math.max(b.last,+i.updatedAt||0)});
+ (S.audit||[]).forEach(a=>{if(a.by&&B.has(a.by))B.get(a.by).last=Math.max(B.get(a.by).last,+a.at||0)});
+ const rows=[...B.values()].filter(b=>b.tot||b.open||b.ret).sort((a,b)=>b.tot-a.tot||b.last-a.last);
+ const chip=(ic,lb,v)=>h('span',{class:'chip'},ic+' '+lb+': ',h('b',{},v));
+ const per=h('select',{onChange:e=>{TEAM_P=e.target.value;render()}},[['1',L('Today','اليوم')],['7',L('Last 7 days','آخر 7 أيام')],['30',L('Last 30 days','آخر 30 يوماً')],['all',L('All time','كل الفترة')]].map(([v,t])=>h('option',{value:v,selected:TEAM_P===v},t)));
+ const feed=(S.audit||[]).filter(a=>a.by&&a.by!=='-').slice(0,12);
+ return h('div',{class:'stack'},
+  h('div',{class:'card'},h('div',{class:'row wrap',style:'justify-content:space-between'},h('h3',{style:'margin:0'},'👥 '+L('Team performance','أداء الفريق')),per),
+   rows.length?h('div',{class:'list',style:'margin-top:10px'},rows.map(b=>{const dn=b.ok+b.bad,idle=b.last&&Date.now()-b.last>2*864e5;
+    return h('div',{class:'item2'},h('div',{class:'row wrap',style:'justify-content:space-between'},h('b',{},b.n),h('span',{class:'hint',style:idle?'color:#b42318':''},'🕒 '+(b.last?agoTxt(b.last):'-'))),
+     h('div',{class:'row wrap',style:'gap:6px;margin-top:6px'},chip('📋',L('Submitted','مُرسل'),b.tot),chip('✅',L('Approved','مقبول'),b.ok),chip('❌',L('Rejected','مرفوض'),b.bad),chip('📈',L('Pass rate','نسبة القبول'),dn?Math.round(b.ok/dn*100)+'%':'-'),chip('↩',L('Returned','مُرجع'),b.ret),chip('🔧',L('Open','مفتوح'),b.open),chip('⏱',L('Avg time','متوسط الوقت'),b.mins.length?durTxt(b.mins.reduce((x,y)=>x+y,0)/b.mins.length):'-'),chip('🧵',L('Defects / inspection','عيوب / فحص'),b.tot?(b.defs/b.tot).toFixed(1):'-'))) })):h('p',{class:'hint',style:'margin:8px 0 0'},L('No inspections in this period.','لا توجد فحوصات في هذه الفترة.')),
+   h('p',{class:'hint'},L('Avg time = from starting an inspection to submitting it (inspections over 24 h are ignored). Returned = sent back for correction by the reviewer.','متوسط الوقت = من بدء الفحص حتى إرساله (الفحوصات التي تجاوزت 24 ساعة لا تُحسب). مُرجع = أعادها المراجع للتصحيح.'))),
+  h('div',{class:'card'},h('h3',{},'🕒 '+L('Recent activity','آخر النشاط')),
+   feed.length?h('div',{class:'list'},feed.map(a=>h('div',{class:'item2',style:'font-size:14px'},h('b',{},a.by),' '+actTxt(a.action)+' ',S.ins.some(i=>i.id===a.rec)?h('a',{href:'#/i/'+a.rec,onClick:e=>{e.preventDefault();go('#/i/'+a.rec)}},a.rec):(a.rec?h('span',{class:'hint'},a.rec):null),h('div',{class:'hint'},agoTxt(a.at))))):h('p',{class:'hint'},L('No activity yet.','لا يوجد نشاط بعد.'))))}
+function vPanel(){return h('div',{class:'stack'},vReviewQueue(),vDash(),vTeam(),vMembers(),vCustomers())}
 /* ---------- quiet five-second draft autosave ---------- */
 setInterval(async()=>{try{if(!D||!dirty||busy||!EDIT.includes(D.status)||!(ROUTE.startsWith('#/new')||ROUTE.startsWith('#/i/')))return;const copy=structuredClone(D);copy.updatedAt=Date.now();copy.status=copy.defs&&copy.defs.length?'in_progress':'draft';copy.history=copy.history||[];await DB.put('inspections',copy);dirty=false;await loadAll();const badge=$('#autosave-status');if(badge){badge.textContent='✓ '+L('Saved','تم الحفظ')+' '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});badge.classList.remove('err');badge.classList.add('ok')}}catch(e){const badge=$('#autosave-status');if(badge){badge.textContent=L('Auto-save failed','فشل الحفظ التلقائي');badge.classList.remove('ok');badge.classList.add('err')}}},5000);
 /* ---------- start ---------- */

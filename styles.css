@@ -249,3 +249,14 @@ html[data-theme="dark"] .pie-total{background:#121e30}
 .menu-theme{border-top:1px solid #2b3f5a;margin-top:6px;padding-top:8px}
 .menu-theme .btn{width:100%;justify-content:flex-start}
 @media(max-width:899px){.top{padding-left:125px;min-height:60px}.top-brand{left:12px;font-size:19px}.top-brand img{width:27px;height:27px}.autosave-status{display:none}.top-menu{top:calc(60px + env(safe-area-inset-top))}}
+
+.chip{display:inline-block;background:#eef3f8;border:1px solid var(--line);border-radius:99px;padding:3px 10px;font-size:13px;white-space:nowrap}.chip b{font-weight:700}
+
+/* date / inspection no. / inspection type block: red with white text */
+.hb.hbred{background:#c62828;color:#fff}.hb.hbred b,.hb.hbred span,.hb.hbred input,.hb.hbred select,.hb.hbred input:disabled,.hb.hbred select:disabled{color:#fff}.sheet .hb.hbred input,.hb.hbred select{border-bottom-color:rgba(255,255,255,.75)}.hb.hbred select option{color:#000}
+
+/* measurement report page: grid must fit inside the A4 page; long values (inspector name) must not be cut */
+.rpage table.mt{min-width:0;width:100%}
+.hbwt td.l{width:40%}
+.hbwt td.v{white-space:normal;overflow-wrap:anywhere;text-overflow:clip;line-height:1.05}
+.hbwt td.v.sm{font-size:8px}
