@@ -1104,7 +1104,7 @@ async function fileRowsAll(){await filesCloudRefresh(false);
  const locals=await DB.all('files'),m=new Map();
  locals.forEach(f=>m.set(f.id,{id:f.id,loc:f,cl:FILES_CLOUD.get(f.id)||null,m:f}));
  FILES_CLOUD.forEach((x,id)=>{if(!m.has(id))m.set(id,{id,loc:null,cl:x,m:x.payload||{}})});
- let rows=[...m.values()];if(!isMgr())rows=rows.filter(r=>r.loc||(r.cl&&r.cl.owner_id===CLOUD_UID));
+ let rows=[...m.values()];if(!isMgr())rows=rows.filter(r=>r.loc||(r.cl&&(r.cl.owner_id===CLOUD_UID||(r.cl.payload&&r.cl.payload.assignedTo===CLOUD_UID))));
  rows.forEach(r=>{r.state=r.loc&&r.cl?'both':r.loc?'dev':'cloud';r.insId=r.loc?(r.loc.insId||''):((r.cl&&r.cl.payload&&r.cl.payload.insId)||'')});
  FILE_ROWS_CACHE=rows;return rows}
 async function fileBlob(r){if(r.loc){const d=await DB.get('filedata',r.id);if(d&&d.blob)return d.blob}if(r.cl)return await fileFromCloud(r.cl.payload);throw new Error(L('File not found.','لم يُعثر على الملف.'))}
@@ -1131,7 +1131,7 @@ function insFilesCard(Di){
  const fill=()=>{const mineR=rows.filter(r=>r.insId===Di.id).sort((a,b)=>(a.m.createdAt||0)-(b.m.createdAt||0));
   title.textContent='📎 '+L('Inspection files','ملفات الفحص')+' ('+mineR.length+')';
   const sameOrd=r=>norm(r.m.orderNo||'')===norm(Di.orderNo||'')?1:0;
-  const free=rows.filter(r=>!r.insId&&r.loc).sort((a,b)=>sameOrd(b)-sameOrd(a)||(b.m.createdAt||0)-(a.m.createdAt||0)).slice(0,100);
+  const free=rows.filter(r=>!r.insId&&(r.loc||(r.cl&&r.cl.payload&&r.cl.payload.assignedTo===CLOUD_UID))).sort((a,b)=>sameOrd(b)-sameOrd(a)||(b.m.createdAt||0)-(a.m.createdAt||0)).slice(0,100);
   linkBox.replaceChildren(...(free.length?[h('select',{onChange:e=>{const id=e.target.value;e.target.value='';const r=free.find(x=>x.id===id);if(r)guard(null,async()=>{const w=await fileSetIns(r,Di.id);if(w)say('Linked on this device; cloud update failed: '+w,'تم الربط على الجهاز؛ وفشل تحديث السحابة: '+w);else say('File added to this inspection.','تمت إضافة الملف للفحص.');await reload()})}},
     h('option',{value:''},'🔗 '+L('Add a file already in the archive…','إضافة ملف موجود في أرشيف الملفات…')),free.map(r=>h('option',{value:r.id},(r.m.name||'—')+(r.m.orderNo?' · '+r.m.orderNo:''))))]:[]));
   box.replaceChildren(...(mineR.length?mineR.map(r=>{const m=r.m;return h('div',{class:'card frow'},h('div',{class:'fmain'},h('span',{class:'ficon'},fileIcon(m)),h('div',{style:'min-width:0;flex:1'},h('b',{class:'fname'},m.name||'—'),h('div',{class:'hint'},[fmtSize(m.size),m.uploaderName?'👤 '+m.uploaderName:'',r.state==='dev'?'📱 '+L('Device only','على الجهاز فقط'):'☁️ '+L('In cloud','في السحابة')].filter(Boolean).join(' · ')),m.note?h('div',{class:'hint'},'📝 '+m.note):null)),
@@ -1143,6 +1143,73 @@ function insFilesCard(Di){
    say('Added '+r.ok+' file(s) to this inspection.'+(r.big?' '+r.big+' skipped (over 50 MB).':'')+(r.errs?' Cloud upload failed for '+r.errs+': '+r.first:''),'تمت إضافة '+r.ok+' ملف للفحص.'+(r.big?' تم تخطي '+r.big+' (أكبر من 50MB).':'')+(r.errs?' فشل الرفع للسحابة لعدد '+r.errs+': '+r.first:''));await reload()});i.click()}},'📎 '+L('Add files from this device','إضافة ملفات من الجهاز'));
  fill();setTimeout(reload,0);
  return h('div',{class:'card form noprint'},title,h('div',{class:'row wrap'},pick,linkBox),msg,box)}
+
+
+/* ===== استيراد دفعة تقارير PDF وتوزيعها على المفتشين حسب الاسم المكتوب داخل التقرير ===== */
+const NAMEMAP_KEY='aql-name-map-v1';
+const arNz=s=>String(s||'').toLowerCase().replace(/[\u064B-\u065F\u0670\u0640]/g,'').replace(/[أإآٱ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/[^a-z0-9\u0600-\u06FF]+/g,' ').trim();
+let FFLATE_P=null;
+function loadFflate(){if(window.fflate)return Promise.resolve(window.fflate);
+ return FFLATE_P||(FFLATE_P=new Promise((res,rej)=>{const s=document.createElement('script');s.src='./vendor/fflate.js';s.onload=()=>res(window.fflate);s.onerror=()=>{FFLATE_P=null;rej(new Error(L('Could not load the ZIP reader. Open the app once while online, then try again.','تعذر تحميل قارئ ZIP. افتح التطبيق مرة واحدة بالإنترنت ثم أعد المحاولة.')))};document.head.append(s)}))}
+async function pdfHeadText(file,maxPages){const lib=await cmpPdfjs();let doc;
+ try{doc=await lib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise}catch(e){return''}
+ let out='';try{for(let p=1;p<=Math.min(maxPages,doc.numPages);p++){const pg=await doc.getPage(p);out+=' '+cmpLinesFrom((await pg.getTextContent()).items).join(' ')}}catch(e){}
+ try{doc.destroy()}catch(e){}return out}
+function detectInspector(text,names){const tx=' '+arNz(text)+' ';let best=null;
+ for(const n of names){const nn=arNz(n);if(!nn)continue;let idx=tx.indexOf(' '+nn+' ');
+  if(idx<0){const toks=nn.split(' ').filter(x=>x.length>1);if(toks.length>=2&&toks.every(x=>tx.includes(' '+x+' ')))idx=1000+Math.max(...toks.map(x=>tx.indexOf(' '+x+' ')))}
+  if(idx>=0&&(!best||idx<best.idx||(idx===best.idx&&nn.length>best.len)))best={n,idx,len:nn.length}}
+ return best?best.n:''}
+async function expandPicked(list,progress){const out=[];
+ for(const f of list){
+  if(/\.zip$/i.test(f.name)||/zip/.test(f.type||'')){const lib=await loadFflate();progress(L('Unzipping ','فك ضغط ')+f.name+'…');
+   const files=lib.unzipSync(new Uint8Array(await f.arrayBuffer()),{filter:e=>/\.pdf$/i.test(e.name)&&!/(^|\/)__MACOSX\//.test(e.name)});
+   for(const path of Object.keys(files))out.push(new File([files[path]],path.split('/').pop(),{type:'application/pdf'}))}
+  else if(/\.pdf$/i.test(f.name)||f.type==='application/pdf')out.push(f)}
+ return out}
+function batchImportCard(onDone){
+ let items=[],accts=[],busy=false,map={};try{map=JSON.parse(LS.get(NAMEMAP_KEY)||'{}')}catch(e){}
+ const msg=h('p',{class:'hint cloud-msg'}),sumEl=h('p',{class:'hint'}),mapBox=h('div',{class:'list'}),tbl=h('div',{class:'list'}),goBtn=h('button',{type:'button',class:'btn p',style:'display:none'},'');
+ const say=(en,ar)=>{msg.textContent=L(en,ar)},sayErr=e=>{msg.textContent=L('Error: ','خطأ: ')+((e&&e.message)||e)};
+ const opts=sel=>[h('option',{value:''},'— '+L('Not assigned','غير مُسند')+' —'),...accts.map(a=>h('option',{value:a.user_id,selected:a.user_id===sel},a.email+(a.role==='inspector'?'':' ('+a.role+')')))];
+ const render=()=>{
+  const na=items.filter(x=>!x.uid).length,tot=items.reduce((s,x)=>s+x.file.size,0);
+  sumEl.textContent=items.length?(L(items.length+' file(s) · '+fmtSize(tot)+' · assigned '+(items.length-na)+' · not assigned '+na,items.length+' ملف · '+fmtSize(tot)+' · مُسند '+(items.length-na)+' · غير مُسند '+na)):'';
+  const dn=[...new Set(items.map(x=>x.det).filter(Boolean))];
+  mapBox.replaceChildren(...dn.map(n=>{const s=h('select',{onChange:e=>{map[n]=e.target.value;LS.set(NAMEMAP_KEY,JSON.stringify(map));items.forEach(x=>{if(x.det===n)x.uid=e.target.value});render()}},opts(map[n]||''));
+   return h('div',{class:'row wrap'},h('b',{style:'flex:1'},'🔎 '+n+' ('+items.filter(x=>x.det===n).length+')'),s)}));
+  tbl.replaceChildren(...items.map(it=>h('div',{class:'card frow'},h('div',{class:'fmain'},h('span',{class:'ficon'},'📄'),h('div',{style:'min-width:0;flex:1'},h('b',{class:'fname'},it.file.name),h('div',{class:'hint'},fmtSize(it.file.size)+' · '+(it.det?'🔎 '+it.det:L('Name not found in the report','لم يُعثر على اسم المفتش في التقرير'))),it.err?h('div',{class:'warn'},it.err):null)),
+   h('div',{class:'fbtns'},h('select',{onChange:e=>{it.uid=e.target.value;render()}},opts(it.uid))))));
+  goBtn.style.display=items.length&&!busy?'':'none';goBtn.textContent='☁️ '+L('Upload & distribute ('+items.length+')','رفع وتوزيع ('+items.length+')')};
+ const run=async fn=>{if(busy)return;busy=true;try{await fn()}catch(e){sayErr(e)}finally{busy=false;render()}};
+ const read=async list=>{const pdfs=await expandPicked(list,t=>{msg.textContent=t});if(!pdfs.length){say('No PDF files found.','لا توجد ملفات PDF.');return}
+  const s=await filesSession(),r=await s.c.rpc('aql_list_members',{p_workspace:s.ws});if(r.error)throw r.error;accts=r.data||[];
+  const names=inspectorList(),seen=new Set();items=[];
+  for(let k=0;k<pdfs.length;k++){const f=pdfs[k],key=f.name+'|'+f.size;if(seen.has(key))continue;seen.add(key);msg.textContent=L('Reading reports ','قراءة التقارير ')+(k+1)+'/'+pdfs.length;
+   const det=detectInspector(await pdfHeadText(f,2),names),u=det&&map[det]&&accts.some(a=>a.user_id===map[det])?map[det]:'';items.push({file:f,det,uid:u,err:'',done:false})}
+  say('Review the distribution below, then press Upload.','راجع التوزيع ثم اضغط رفع وتوزيع.')};
+ const go=()=>run(async()=>{
+  if(items.some(x=>!x.uid)&&!confirm(L('Some files are not assigned to anyone (only you will see them). Continue?','بعض الملفات غير مُسندة لأي مفتش (ستظهر لك أنت فقط). المتابعة؟')))return;
+  const {c,ws,user}=await filesSession();await filesCloudRefresh(true);let ok=0,skip=0,fail=0,n=0,q=items.slice();
+  const one=async it=>{const a=accts.find(x=>x.user_id===it.uid);
+   if([...FILES_CLOUD.values()].some(x=>x.payload&&x.payload.name===it.file.name&&x.payload.size===it.file.size&&(x.payload.assignedTo||'')===it.uid)){it.done=true;skip++;return}
+   const id='f_'+Date.now().toString(36)+uid(5),path=ws+'/'+user.id+'/'+id+'/file.pdf';
+   const up=await c.storage.from('aql-files').upload(path,it.file,{contentType:'application/pdf',upsert:true});if(up.error)throw up.error;
+   const payload={id,name:it.file.name,size:it.file.size,mime:'application/pdf',note:'',orderNo:'',insId:'',createdAt:Date.now(),uploaderName:(S.me&&S.me.name)||'',uploaderEmail:user.email||'',assignedTo:it.uid,assignedName:it.det||(a?a.email:''),path},iso=new Date().toISOString();
+   const r=await c.from('aql_cloud_records').upsert({workspace_id:ws,record_type:'files',record_id:id,payload,updated_at:iso},{onConflict:'workspace_id,record_type,record_id'});
+   if(r.error){try{await c.storage.from('aql-files').remove([path])}catch(e){}throw r.error}
+   FILES_CLOUD.set(id,{record_id:id,payload,owner_id:user.id,updated_at:iso});it.done=true;ok++};
+  const worker=async()=>{while(q.length){const it=q.shift();try{await one(it)}catch(e){fail++;it.err=(e&&e.message)||String(e)}n++;msg.textContent=L('Uploading ','جارٍ الرفع ')+n+'/'+items.length}};
+  await Promise.all([worker(),worker(),worker()]);
+  await audit('files_batch_import','batch',{ok,skip,fail});items=items.filter(x=>!x.done);
+  say('Done: uploaded '+ok+(skip?', already there '+skip:'')+(fail?', failed '+fail+' (press Upload again to retry)':'')+'.','تم: رُفع '+ok+(skip?'، موجود مسبقاً '+skip:'')+(fail?'، فشل '+fail+' (اضغط رفع وتوزيع للمحاولة مرة أخرى)':'')+'.');
+  if(onDone)await onDone()});
+ goBtn.onclick=go;
+ const pickBtn=h('button',{type:'button',class:'btn',onClick:()=>{const i=document.createElement('input');i.type='file';i.multiple=true;i.accept='.pdf,.zip,application/pdf,application/zip';i.onchange=()=>run(()=>read([...i.files]));i.click()}},'📥 '+L('Choose PDFs or a ZIP','اختيار ملفات PDF أو ملف مضغوط'));
+ render();
+ return h('div',{class:'card form noprint'},h('h3',{},'📥 '+L('Batch import reports (manager)','استيراد دفعة تقارير (للمدير)')),
+  h('p',{class:'hint'},L('Pick all the PDF reports (or one ZIP). The inspector name written inside each report is read and the file is sent to that inspector\'s account. On a phone prefer picking the PDFs over one big ZIP.','اختر كل تقارير PDF (أو ملف ZIP واحد). يُقرأ اسم المفتش المكتوب داخل كل تقرير ويُرسل الملف لحساب هذا المفتش. على الموبايل الأفضل اختيار الملفات نفسها بدل ZIP كبير.')),
+  h('div',{class:'row wrap'},pickBtn,goBtn),msg,sumEl,mapBox,tbl)}
 
 function archTabs(cur){const t=(href,k,txt)=>h('a',{href,class:'seg-i'+(cur===k?' on':'')},txt);
  return h('div',{class:'seg noprint'},t('#/archive','archive','🗂 '+L('Inspections','الفحوصات')),t('#/files','files','📎 '+L('Files','الملفات')))}
@@ -1158,7 +1225,7 @@ function vFiles(){
   locals.forEach(f=>m.set(f.id,{id:f.id,loc:f,cl:FILES_CLOUD.get(f.id)||null,m:f}));
   FILES_CLOUD.forEach((x,id)=>{if(!m.has(id))m.set(id,{id,loc:null,cl:x,m:x.payload||{}})});
   rows=[...m.values()].map(r=>({...r,state:r.loc&&r.cl?'both':r.loc?'dev':'cloud',insId:r.loc?(r.loc.insId||''):((r.cl&&r.cl.payload&&r.cl.payload.insId)||'')}));
-  if(!isMgr())rows=rows.filter(r=>r.loc||(r.cl&&r.cl.owner_id===CLOUD_UID));
+  if(!isMgr())rows=rows.filter(r=>r.loc||(r.cl&&(r.cl.owner_id===CLOUD_UID||(r.cl.payload&&r.cl.payload.assignedTo===CLOUD_UID))));
   fill()};
  FILES_HOOK=()=>{if(document.body.contains(box))load(true);else FILES_HOOK=null};
  const openF=async r=>{const w=window.open('','_blank');try{const b=await blobOf(r),u=URL.createObjectURL(new Blob([b],{type:r.m.mime||b.type}));if(w)w.location.href=u;else cmpSaveBlob(b,r.m.name);setTimeout(()=>URL.revokeObjectURL(u),60000)}catch(e){if(w)w.close();throw e}};
@@ -1184,7 +1251,7 @@ function vFiles(){
   const canDelCl=r=>r.cl&&(isMgr()||r.cl.owner_id===CLOUD_UID);
   const stB=r=>h('span',{class:'badge '+(r.state==='dev'?'pending_review':'approved')},r.state==='both'?'☁️ '+L('In cloud + device','في السحابة وعلى الجهاز'):r.state==='dev'?'📱 '+L('Device only','على الجهاز فقط'):'☁️ '+L('Cloud only','في السحابة فقط'));
   box.replaceChildren(...(list.length?list.map(r=>{const m=r.m,meta=[fmtSize(m.size),dtf(m.createdAt),(isMgr()||m.uploaderName!==(S.me&&S.me.name))&&m.uploaderName?'👤 '+m.uploaderName:'',m.orderNo?L('Order ','طلبية ')+m.orderNo:''].filter(Boolean).join(' · ');
-   return h('div',{class:'card frow'},h('div',{class:'fmain'},h('span',{class:'ficon'},fileIcon(m)),h('div',{style:'min-width:0;flex:1'},h('b',{class:'fname'},m.name||'—'),h('div',{class:'hint'},meta),m.note?h('div',{class:'hint'},'📝 '+m.note):null)),stB(r),lnB(r),
+   return h('div',{class:'card frow'},h('div',{class:'fmain'},h('span',{class:'ficon'},fileIcon(m)),h('div',{style:'min-width:0;flex:1'},h('b',{class:'fname'},m.name||'—'),h('div',{class:'hint'},meta),m.note?h('div',{class:'hint'},'📝 '+m.note):null)),stB(r),lnB(r),(r.m.assignedName?h('span',{class:'badge'},'📌 '+r.m.assignedName):null),
     h('div',{class:'fbtns'},
      lnS(r),fileViewable(m)?h('button',{type:'button',class:'btn s',onClick:act(()=>openF(r))},'👁 '+L('Open','فتح')):null,
      h('button',{type:'button',class:'btn s',onClick:act(()=>dlF(r))},'⬇ '+L('Download','تنزيل')),
@@ -1213,6 +1280,7 @@ function vFiles(){
    h('p',{class:'hint'},L('Any file type, up to 50 MB each. Files are stored on this device first; press “Upload to cloud” to send one to the manager’s cloud.','أي نوع ملف حتى 50MB للملف. تُحفظ الملفات على الجهاز أولاً؛ اضغط «رفع للسحابة» لإرسال الملف لسحابة المدير.'))),
   h('div',{class:'row wrap'},h('input',{placeholder:L('Search name, order, note, uploader','ابحث بالاسم أو الطلبية أو الملاحظة أو من رفع'),onInput:e=>{F.q=e.target.value;fill()}}),
    h('select',{onChange:e=>{F.st=e.target.value;fill()}},h('option',{value:''},L('All','الكل')),h('option',{value:'dev'},L('Device only','على الجهاز فقط')),h('option',{value:'both'},L('In cloud + device','في السحابة وعلى الجهاز')),h('option',{value:'cloud'},L('Cloud only','في السحابة فقط'))),h('select',{onChange:e=>{F.lk=e.target.value;fill()}},h('option',{value:''},L('Linked & not linked','المربوط وغير المربوط')),h('option',{value:'yes'},L('Linked to an inspection','مربوط بفحص')),h('option',{value:'no'},L('Not linked','غير مربوط'))),by),
+  isMgr()?batchImportCard(()=>load(true)):null,
   sum,msg,box)}
 
 
