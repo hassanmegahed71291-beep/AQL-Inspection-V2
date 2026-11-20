@@ -277,3 +277,32 @@ html[data-theme="dark"] .seg-i{background:#121e30;color:var(--ink)}html[data-the
 .fbtns{display:flex;gap:6px;flex-wrap:wrap}
 .cloud-msg{overflow-wrap:anywhere;font-weight:600;min-height:1.4em;margin:0}
 .kv{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid var(--line);padding:6px 0;font-size:14px}.kv span{color:var(--mute)}.kv b{overflow-wrap:anywhere;text-align:end}
+
+/* ---------- مكتبة العيوب (تصميم القائمة) ---------- */
+.libbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.libsearch{flex:1;min-width:170px;position:relative}
+.libsearch input{width:100%;min-height:46px;border-radius:14px;border:1px solid var(--line);padding:0 14px;padding-inline-start:40px;background:#fff;color:var(--ink)}
+.libsearch span{position:absolute;inset-inline-start:13px;top:50%;transform:translateY(-50%);opacity:.55;pointer-events:none}
+.libchips{display:flex;gap:8px;overflow-x:auto;padding:12px 0 4px;-webkit-overflow-scrolling:touch}
+.libchip{flex:0 0 auto;min-height:40px;padding:0 20px;border-radius:12px;border:1px solid var(--line);background:#eef2f7;color:var(--ink);font-weight:600;cursor:pointer}
+.libchip.on{background:#1e4b8f;border-color:#1e4b8f;color:#fff}
+.liblist{display:grid;gap:8px;margin-top:8px}
+.libitem{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-inline-start:5px solid var(--line);border-radius:14px;padding:10px 12px}
+.libitem.sev-critical{border-inline-start-color:#ef4444}.libitem.sev-major{border-inline-start-color:#f59e0b}.libitem.sev-minor{border-inline-start-color:#eab308}
+.libitem.off{opacity:.55}
+.libname{flex:1;min-width:0;display:grid;gap:2px}.libname b{font-size:16px;line-height:1.35;overflow-wrap:anywhere}
+.libitem .sevchip{border-radius:10px;padding:5px 11px;white-space:nowrap}
+.libitem .sevchip.critical{background:#fee2e2;color:#b91c1c}.libitem .sevchip.major{background:#ffedd5;color:#c2410c}.libitem .sevchip.minor{background:#fef9c3;color:#854d0e}
+html[data-theme="dark"] .libsearch input,html[data-theme="dark"] .libitem{background:#121e30;color:var(--ink)}
+html[data-theme="dark"] .libchip{background:#16263d;color:var(--ink)}
+html[data-theme="dark"] .libchip.on{background:#2563eb;border-color:#2563eb;color:#fff}
+html[data-theme="dark"] .libitem .sevchip.critical{background:#5b1a1a;color:#fecaca}
+html[data-theme="dark"] .libitem .sevchip.major{background:#5a3412;color:#fed7aa}
+html[data-theme="dark"] .libitem .sevchip.minor{background:#4a3f0e;color:#fde68a}
+.libreport{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px;padding:9px 12px;border-radius:12px;background:#e0f2fe;color:#0c4a6e;font-size:14px}
+.libreport.off{background:#f1f5f9;color:var(--mute)}
+.libnote{margin:8px 2px 0;font-size:14px;font-weight:600;min-height:0}.libnote:empty{display:none}.libnote.ok{color:#067647}.libnote.warn{color:#b54708}
+.libitem .libedit{min-width:36px;padding:0;justify-content:center;background:transparent}
+.libitem .libadd{white-space:nowrap}.libitem .libadd.dim{opacity:.55}
+html[data-theme="dark"] .libreport{background:#12304a;color:#bae6fd}
+html[data-theme="dark"] .libreport.off{background:#16263d;color:var(--mute)}

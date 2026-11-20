@@ -45,6 +45,7 @@ async function loadAll(){S.lib=await DB.all('library');S.plans=await DB.all('pla
   for(const x of allIns){if(x.deletedAt&&x.deletedAt<lim){try{await DB.del('inspections',x.id)}catch(e){}}else keepIns.push(x)}
   S.ins=keepIns.filter(x=>!x.deletedAt);S.trash=keepIns.filter(x=>x.deletedAt);S.ins.forEach(migratePhotos);
   const kv=await DB.all('kv');S.settings=kv.find(x=>x.id==='settings');if(!S.settings){S.settings=defSettings();await DB.put('kv',S.settings)}else if(S.settings.platformName!=='MEYAR'){S.settings.platformName='MEYAR';await DB.put('kv',S.settings)}
+  S.inspSets={};kv.forEach(x=>{if(String(x.id).startsWith('inspset_'))S.inspSets[x.id]=x});
   S.audit=(kv.find(x=>x.id==='audit')||{items:[]}).items;SINGLE.forEach(g=>{S.settings[g]=S.settings[g]||[]});
   S.members=(kv.find(x=>x.id==='members')||{items:[]}).items;S.lists=kv.find(x=>x.id==='lists')||{id:'lists',customers:[]};
   S.me=S.members.find(m=>m.active&&m.id===(SS.get('meId')||LS.get('meId')))||null;await seedDefaults(kv)}
@@ -60,7 +61,7 @@ async function seedDefaults(kv){if(kv.find(x=>x.id==='seeded'&&x.v>=3))return;
   const used=new Set(S.ins.flatMap(i=>(i.defs||[]).map(d=>d.defectId)));
   for(const id of['OSS','OSA','CUT','OSB','OSH','BTN','SHD','THR','DST','STN','IRN']){const x=S.lib.find(l=>l.id===id);if(x&&!used.has(id)&&!(x.photos&&x.photos.length))await DB.del('library',id)}
   const have=new Set((await DB.all('library')).map(l=>norm(l.nameEn)));
-  for(const [code,en,ar,sv,g] of SEEDDEF){if(have.has(norm(en)))continue;await DB.put('library',{id:code,code,nameEn:en,nameAr:ar,descEn:'',descAr:'',severity:sv,garments:[...g],active:true,photos:[],createdAt:Date.now(),updatedAt:Date.now()})}
+  for(const [code,en,ar,sv,g] of SEEDDEF){if(have.has(norm(en)))continue;await DB.put('library',{id:code,code,nameEn:en,nameAr:ar,descEn:'',descAr:'',severity:sv,garments:[...g],active:true,photos:[],createdAt:Date.now(),updatedAt:0})}
   await DB.put('kv',{id:'seeded',v:3});S.plans=await DB.all('plans');S.lib=await DB.all('library')}
 async function audit(action,rec,meta){S.audit.unshift({at:Date.now(),by:(S.me&&S.me.name)||'-',action,rec,meta:meta||{}});S.audit=S.audit.slice(0,500);await DB.put('kv',{id:'audit',items:S.audit})}
 /* ---------- AQL engine (pure) ---------- */
@@ -77,7 +78,7 @@ function validateRows(rows){const e=[];const s=[...rows].sort((a,b)=>a.lotMin-b.
 const activePlan=()=>{const p=S.plans.find(x=>x.active&&x.current);if(!p)return null;const v=p.versions[p.current];return{id:p.id,name:p.name,version:p.current,...v}};
 /* ---------- state / router ---------- */
 let D=null,dirty=false,errs=[],okMsg='',busy=false,DN='',LE=null,PE=null;
-const NAV=[['#/','📊','Manager Panel','لوحة المدير'],['#/new','➕','New Inspection','فحص جديد'],['#/archive','🗂','Inspection Archive','أرشيف الفحوصات'],['#/files','📎','File Archive','أرشيف الملفات'],['#/charts','🥧','Pie Charts','الرسوم الدائرية'],['#/monthly','📅','Monthly Quality Report','تقرير الجودة الشهري'],['#/compare','⚖️','Customer vs Factory Report','مقارنة تقرير العميل بالمصنع'],['#/library','📚','Defect Library','مكتبة العيوب'],['#/reports','📄','Reports','التقارير'],['#/aql','🛠','AQL Plans','خطط AQL'],['#/cloud','☁️','My Cloud','سحابتي'],['#/settings','⚙️','General Settings','الإعدادات العامة']];
+const NAV=[['#/','📊','Manager Panel','لوحة المدير'],['#/new','➕','New Inspection','فحص جديد'],['#/archive','🗂','Inspection Archive','أرشيف الفحوصات'],['#/files','📎','File Archive','أرشيف الملفات'],['#/charts','🥧','Pie Charts','الرسوم الدائرية'],['#/monthly','📅','Monthly Quality Report','تقرير الجودة الشهري'],['#/compare','⚖️','Customer vs Factory Report','مقارنة تقرير العميل بالمصنع'],['#/library','📚','Defect Library','مكتبة العيوب'],['#/reports','📄','Reports','التقارير'],['#/aql','🛠','AQL Plans','خطط AQL'],['#/cloud','☁️','My Cloud','سحابتي'],['#/inspset','🛠','Inspection Settings','إعدادات الفحص'],['#/settings','⚙️','General Settings','الإعدادات العامة']];
 let ROUTE=(location.hash&&location.hash.startsWith('#/'))?location.hash:'#/';
 function go(x){if(x===ROUTE)return;
   if(dirty&&!confirm(L('You have unsaved changes. Leave without saving?','لديك تغييرات غير محفوظة. المغادرة دون حفظ؟')))return;
@@ -138,7 +139,7 @@ function render(){document.documentElement.lang=S.lang;document.documentElement.
   const sw=h('button',{class:'btn ghost s',onClick:()=>{S.lang=S.lang==='en'?'ar':'en';LS.set('lang',S.lang);render()}},S.lang==='en'?'العربية':'English');
   const link=n=>h('a',{href:n[0],class:n===curNav?'on':''},h('span',{},n[1]),' ',L(n[2],n[3]));
   const name='MEYAR',fac=S.settings.factoryName;
-  const v=({'':vPanel,new:vIns,i:vIns,archive:()=>vList(false),reports:()=>vList(true),charts:vCharts,monthly:vMonthly,compare:vCompare,library:vLib,aql:vAql,settings:vSettings,report:vReport,files:vFiles,cloud:vCloud})[hash.split('/')[1]||'']||vDash;
+  const v=({'':vPanel,new:vIns,i:vIns,archive:()=>vList(false),reports:()=>vList(true),charts:vCharts,monthly:vMonthly,compare:vCompare,library:vLib,aql:vAql,settings:vSettings,inspset:vInspSet,report:vReport,files:vFiles,cloud:vCloud})[hash.split('/')[1]||'']||vDash;
   $('#app').replaceChildren(h('div',{class:'shell'},
     h('aside',{class:'side'},h('div',{class:'brand'},h('div',{class:'brand-wordmark',dir:'ltr'},h('img',{src:'./icons/meyar-192.png',alt:'M'}),h('b',{},'EYAR')),h('small',{},fac)),navs.map(link),h('div',{style:'margin-top:auto;display:grid;gap:8px'},themeButton(),h('small',{style:'color:#8fa6bb;padding:0 8px'},S.me.name+' · '+(isMgr()?L('Manager','مدير'):L('Inspector','مفتش'))),sw,outBtn)),
     h('div',{class:'main'},h('header',{class:'top'},h('button',{class:'menu-toggle',type:'button','aria-label':'Open navigation',onClick:()=>{const m=$('#top-menu');if(m)m.classList.toggle('open')}},'☰'),h('div',{class:'top-brand',dir:'ltr'},h('img',{src:'./icons/meyar-192.png',alt:'M'}),h('span',{},'EYAR')),h('h1',{},L(curNav[2],curNav[3])),h('span',{id:'autosave-status',class:'autosave-status'},dirty?L('Unsaved changes','تغييرات غير محفوظة'):L('Saved','تم الحفظ')),cloudChipEl(),h('span',{style:'display:flex;gap:6px'},sw,outBtn)),h('nav',{id:'top-menu',class:'top-menu'},[...navs.map(link),h('div',{class:'menu-theme'},themeButton())]),h('main',{id:'view'},pagePdfBar(),v()))));
@@ -611,25 +612,54 @@ function vCompare(){
 
 /* ---------- defect library ---------- */
 const blankDef=()=>({code:'',nameEn:'',nameAr:'',descEn:'',descAr:'',severity:'minor',garments:[...SINGLE],active:true,photos:[]});
+const libActive=()=>!!(D&&EDIT.includes(D.status)&&Array.isArray(D.defs)&&(isMgr()||mine(D)));
+async function libAddToReport(l){
+ if(!libActive())return{ok:false,text:L('No open report. Open a draft inspection first (New Inspection or the archive), then come back here.','لا يوجد تقرير مفتوح. افتح مسودة فحص أولاً (فحص جديد أو الأرشيف) ثم ارجع هنا.')};
+ const rg=garmentsOf(D.garmentType),cand=(l.garments&&l.garments.length?l.garments:SINGLE).filter(g=>rg.includes(g));
+ const g=LIB_F.g&&cand.includes(LIB_F.g)?LIB_F.g:cand[0];
+ if(!g)return{ok:false,text:L('This defect does not apply to the garment type of the open report.','هذا العيب لا ينطبق على نوع القطعة في التقرير المفتوح.')};
+ const nm=S.lang==='ar'?(l.nameAr||l.nameEn):(l.nameEn||l.nameAr),ex=D.defs.find(x=>x.defectId===l.id&&x.garment===g);let n=1;
+ if(ex){ex.pieces=(num(ex.pieces)||0)+1;ex.occurrences=(num(ex.occurrences)||0)+1;n=ex.occurrences}
+ else{const d=deptsFor(g)[0];D.defs.push({id:'d_'+uid(8),garment:g,deptId:d?d.id:'',deptName:d?d.en:'',deptAr:d?d.ar:'',defectId:l.id,code:l.code,nameEn:l.nameEn,nameAr:l.nameAr,severity:l.severity,pieces:1,occurrences:1,description:'',photos:[],corrective:'',responsible:'',followUp:'none',reinspection:'',_open:false})}
+ const x=structuredClone(D);x.defs.forEach(d=>{delete d._open});if(x.status==='draft')x.status='in_progress';x.updatedAt=Date.now();
+ await DB.put('inspections',x);D.status=x.status;D.updatedAt=x.updatedAt;dirty=false;await loadAll();
+ return{ok:true,text:'✔ '+L('Added "'+nm+'" to the report ('+gName(g)+')'+(n>1?' — count '+n:''),'تمت إضافة «'+nm+'» للتقرير ('+gName(g)+')'+(n>1?' — العدد '+n:''))}}
+let LIB_F={g:'',q:''};
 function vLib(){
   if(LE){const e=LE.d;const tg=g=>{e.garments=e.garments.includes(g)?e.garments.filter(x=>x!==g):[...e.garments,g]};
-    return h('div',{class:'card form'},h('h3',{},e.id?e.code:L('New defect','عيب جديد')),
-      fld(L('Code','الكود'),()=>e.code,v=>e.code=v,{disabled:!!e.id}),fld(L('English name','الاسم بالإنجليزية'),()=>e.nameEn,v=>e.nameEn=v),fld(L('Arabic name','الاسم بالعربية'),()=>e.nameAr,v=>e.nameAr=v,{dir:'rtl'}),
-      h('label',{},L('English description','الوصف بالإنجليزية'),h('textarea',{onInput:x=>e.descEn=x.target.value},e.descEn)),h('label',{},L('Arabic description','الوصف بالعربية'),h('textarea',{dir:'rtl',onInput:x=>e.descAr=x.target.value},e.descAr)),
-      h('label',{},L('Severity','الخطورة'),h('select',{value:e.severity,onChange:x=>e.severity=x.target.value},SEV.map(s=>h('option',{value:s},L(...sevL[s]))))),
+    return h('div',{class:'card form'},h('h3',{},e.id?(S.lang==='ar'?e.nameAr:e.nameEn)||e.code:L('New defect','عيب جديد')),
+      e.id&&e.updatedBy?h('p',{class:'hint'},L('Last edited by ','آخر تعديل بواسطة ')+e.updatedBy+(e.updatedAt?' · '+new Date(e.updatedAt).toLocaleString():'')):null,
+      fld(L('English name','الاسم بالإنجليزية'),()=>e.nameEn,v=>e.nameEn=v),fld(L('Arabic name','الاسم بالعربية'),()=>e.nameAr,v=>e.nameAr=v,{dir:'rtl'}),
+      h('label',{},L('Severity','التصنيف'),h('select',{value:e.severity,onChange:x=>e.severity=x.target.value},SEV.map(s=>h('option',{value:s,selected:e.severity===s},L(...sevL[s]))))),
       h('div',{class:'row wrap'},SINGLE.map(g=>h('label',{class:'chk'},h('input',{type:'checkbox',checked:e.garments.includes(g),onChange:()=>tg(g)}),gName(g))),h('label',{class:'chk'},h('input',{type:'checkbox',checked:e.active,onChange:x=>e.active=x.target.checked}),L('Active','مفعّل'))),
+      h('label',{},L('English description','الوصف بالإنجليزية'),h('textarea',{onInput:x=>e.descEn=x.target.value},e.descEn)),h('label',{},L('Arabic description','الوصف بالعربية'),h('textarea',{dir:'rtl',onInput:x=>e.descAr=x.target.value},e.descAr)),
       photoStrip(e.photos,i=>{e.photos.splice(i,1);render()},false,p=>{e.photos.push(p);render()}),LE.msg?h('p',{class:'err'},LE.msg):null,
       h('div',{class:'row'},h('button',{class:'btn p',onClick:saveDef},L('Save','حفظ')),h('button',{class:'btn',onClick:()=>{LE=null;render()}},L('Cancel','إلغاء'))))}
-  const q={v:''};const box=h('div',{class:'list'});
-  const fill=()=>{const r=S.lib.filter(d=>norm(d.code+d.nameEn+d.nameAr).includes(norm(q.v))).sort((a,b)=>a.code.localeCompare(b.code));
-    box.replaceChildren(...(r.length?r.map(d=>h('div',{class:'card item'},h('div',{},h('b',{},d.code),' · '+(S.lang==='ar'?d.nameAr:d.nameEn),h('div',{class:'hint'},`${L(...sevL[d.severity])} · ${(d.garments||[]).join(', ')}${d.active?'':' · '+L('inactive','غير مفعّل')}`)),isMgr()?h('button',{class:'btn s',onClick:()=>{LE={d:structuredClone(d)};render()}},L('Edit','تعديل')):null)):[h('div',{class:'card empty'},h('h2',{},L('No defects yet','لا توجد عيوب بعد')),h('p',{class:'hint'},L('Add your first defect definition.','أضف أول تعريف للعيب.')))]))};
-  fill();return h('div',{},h('div',{class:'row wrap'},h('input',{placeholder:L('Search code or name','ابحث بالكود أو الاسم'),onInput:e=>{q.v=e.target.value;fill()}}),isMgr()?h('button',{class:'btn p',onClick:()=>{LE={d:blankDef()};render()}},L('Add defect','إضافة عيب')):null),box)}
-async function saveDef(){const e=LE.d;const code=e.code.trim().toUpperCase().replace(/\s+/g,'-');const id=e.id||code;
-  if(!code||!e.nameEn.trim()||!e.nameAr.trim()){LE.msg=L('Code, English name and Arabic name are required.','الكود والاسم الإنجليزي والعربي مطلوبة.');return render()}
+  const note=h('p',{class:'libnote'}),rc=id=>libActive()?D.defs.filter(x=>x.defectId===id).reduce((a,x)=>a+(num(x.occurrences)||1),0):0,chips=h('div',{class:'libchips'}),box=h('div',{class:'liblist'}),cnt=h('p',{class:'hint',style:'margin:6px 2px 0'});
+  const gs=SINGLE.filter(g=>g==='jacket'||g==='trousers'||S.lib.some(d=>(d.garments||[]).includes(g)));
+  if(LIB_F.g&&!gs.includes(LIB_F.g))LIB_F.g='';
+  const nm=d=>S.lang==='ar'?(d.nameAr||d.nameEn):(d.nameEn||d.nameAr),rank={critical:0,major:1,minor:2};
+  const fill=()=>{
+    chips.replaceChildren(...[['',L('All','الكل')],...gs.map(g=>[g,gName(g)])].map(([g,lb])=>h('button',{type:'button',class:'libchip'+(LIB_F.g===g?' on':''),onClick:()=>{LIB_F.g=g;fill()}},lb)));
+    const r=S.lib.filter(d=>(!LIB_F.g||(d.garments||[]).includes(LIB_F.g))&&norm(d.code+d.nameEn+d.nameAr).includes(norm(LIB_F.q))).sort((a,b)=>((rank[a.severity]??3)-(rank[b.severity]??3))||String(a.code).localeCompare(String(b.code)));
+    cnt.textContent=r.length+' '+L('defects','عيب');
+    box.replaceChildren(...(r.length?r.map(d=>h('div',{class:'libitem sev-'+d.severity+(d.active?'':' off')},
+      h('div',{class:'libname'},h('b',{},nm(d)),(!LIB_F.g||!d.active||(d.photos&&d.photos.length))?h('span',{class:'hint'},[!LIB_F.g?(d.garments||[]).map(gName).join(' · '):'',d.active?'':L('inactive','غير مفعّل'),(d.photos&&d.photos.length)?'📷 '+d.photos.length:''].filter(Boolean).join(' · ')):null),
+      h('span',{class:'sevchip '+d.severity},L(...sevL[d.severity])),
+      h('button',{type:'button',class:'btn s libedit','aria-label':L('Edit','تعديل'),onClick:()=>{LE={d:structuredClone(d)};render()}},'✏️'),
+      h('button',{type:'button',class:'btn s p libadd'+(libActive()?'':' dim'),onClick:async e=>{const b=e.currentTarget;b.disabled=true;try{const r=await libAddToReport(d);note.textContent=r.text;note.className='libnote '+(r.ok?'ok':'warn');fill()}catch(x){note.textContent=L('Error: ','خطأ: ')+((x&&x.message)||x);note.className='libnote warn'}finally{b.disabled=false}}},libActive()&&rc(d.id)?'×'+rc(d.id)+' ＋':'＋ '+L('Add','إضافة')))):[h('div',{class:'card empty'},h('h2',{},L('No defects found','لا توجد عيوب')),h('p',{class:'hint'},L('Try another search or add a new defect.','جرّب بحثاً آخر أو أضف عيباً جديداً.')))]))};
+  fill();
+  return h('div',{},h('div',{class:'libbar'},h('div',{class:'libsearch'},h('span',{},'🔍'),h('input',{value:LIB_F.q,placeholder:L('Search for a defect…','ابحث عن عيب…'),onInput:e=>{LIB_F.q=e.target.value;fill()}})),
+    h('button',{class:'btn p',onClick:()=>{LE={d:{...blankDef(),garments:LIB_F.g?[LIB_F.g]:[...SINGLE]}};render()}},'＋ '+L('Add defect','إضافة عيب'))),
+    libActive()?h('div',{class:'libreport'},h('span',{},'📝 '+L('Adding to report: ','الإضافة إلى التقرير: ')+' '),h('b',{style:'flex:1'},(D.orderNo||L('New report','تقرير جديد'))+(D.customer?' · '+D.customer:'')),h('button',{type:'button',class:'btn s',onClick:async()=>{if(!S.ins.some(i=>i.id===D.id)){const x=structuredClone(D);x.defs.forEach(d=>{delete d._open});x.updatedAt=Date.now();await DB.put('inspections',x);dirty=false;await loadAll()}go('#/i/'+D.id)}},'↩ '+L('Back to report','العودة للتقرير'))):h('div',{class:'libreport off'},'ℹ️ '+L('Open an inspection draft to add defects to it from here.','افتح مسودة فحص لتضيف العيوب إليها من هنا.')),
+    note,chips,cnt,box)}
+async function saveDef(){const e=LE.d;
+  if(!e.nameEn.trim()||!e.nameAr.trim()){LE.msg=L('Both the English and Arabic names are required.','الاسم الإنجليزي والعربي مطلوبان.');return render()}
   if(!e.garments.length){LE.msg=L('Select at least one garment type.','اختر نوع قطعة واحداً على الأقل.');return render()}
-  if(!e.id&&S.lib.some(d=>d.id===code)){LE.msg=L('This code already exists.','هذا الكود موجود بالفعل.');return render()}
-  const dup=S.lib.find(d=>d.id!==id&&(norm(d.nameEn)===norm(e.nameEn)||norm(d.nameAr)===norm(e.nameAr)));if(dup){LE.msg=L('Looks like a duplicate of '+dup.code,'يبدو مكرراً للعيب '+dup.code);return render()}
-  await DB.put('library',{...e,id,code:e.id?e.code:code,updatedAt:Date.now(),createdAt:e.createdAt||Date.now()});await audit(e.id?'defect_updated':'defect_created',id);LE=null;await loadAll();render()}
+  const id=e.id||('N-'+Date.now().toString(36).toUpperCase().slice(-5)+uid(2).toUpperCase()),code=e.id?e.code:id;
+  const dup=S.lib.find(d=>d.id!==id&&(norm(d.nameEn)===norm(e.nameEn)||norm(d.nameAr)===norm(e.nameAr)));if(dup){LE.msg=L('Looks like a duplicate of ','يبدو مكرراً للعيب ')+(S.lang==='ar'?dup.nameAr:dup.nameEn);return render()}
+  const me=(S.me&&S.me.name)||'';
+  await DB.put('library',{...e,id,code,updatedAt:Date.now(),createdAt:e.createdAt||Date.now(),createdBy:e.createdBy||me,updatedBy:me});await audit(e.id?'defect_updated':'defect_created',id);LE=null;await loadAll();render();try{cloudAuto(true)}catch(x){}}
 /* ---------- inspection form ---------- */
 const deptsFor=g=>{const l=(S.settings[g]||[]).filter(d=>d.active).map(d=>({...d}));Object.values(D.secs).forEach(s=>{if(s.garment===g&&!l.some(d=>d.id===s.deptId))l.push({id:s.deptId,en:s.nameEn,ar:s.nameAr})});return l};
 const dnm=d=>S.lang==='ar'?d.ar||d.en:d.en;
@@ -853,7 +883,7 @@ async function cloudSyncCore(mode,opts){opts=opts||{};
  const c=cloudClient(),ws=localStorage.getItem(CLOUD_WS_KEY);
  if(!ws)throw new Error(L('Create or join a workspace first.','أنشئ مساحة عمل أو انضم إليها أولاً.'));
  const ses=await c.auth.getSession();if(ses.error)throw ses.error;if(!ses.data.session)throw new Error(L('Sign in to your cloud account first.','سجل الدخول إلى حساب السحابة أولاً.'));
- const role=await cloudRole(c,ws),mgr=role!=='inspector',canW=k=>mgr||k.startsWith('inspections/');
+ const role=await cloudRole(c,ws),mgr=role!=='inspector',canW=k=>mgr||k.startsWith('inspections/')||k.startsWith('kv/inspset_')||k.startsWith('library/');
  let meta=await DB.get('kv','syncmeta');if(!meta||meta.ws!==ws)meta=SYNC_NEW_META(ws);['h','s','tomb','aud'].forEach(f=>meta[f]=meta[f]||{});
  const st={up:0,down:0,del:0,delLocal:0,conf:0,skip:0,err:'',changed:false},T='aql_cloud_records',OC={onConflict:'workspace_id,record_type,record_id'};
  const fail=e=>{st.skip++;if(!st.err)st.err=(e&&e.message)||String(e)};
@@ -867,7 +897,7 @@ async function cloudSyncCore(mode,opts){opts=opts||{};
   /* 2. local records */
   const local=new Map();
   for(const t of ['library','plans','inspections'])for(const it of await DB.all(t))local.set(t+'/'+it.id,{store:t,type:t,id:String(it.id),obj:it});
-  for(const it of await DB.all('kv'))if(it.id==='settings'||it.id==='lists')local.set('kv/'+it.id,{store:'kv',type:'kv',id:it.id,obj:it});
+  for(const it of await DB.all('kv'))if(it.id==='settings'||it.id==='lists'||String(it.id).startsWith('inspset_'))local.set('kv/'+it.id,{store:'kv',type:'kv',id:it.id,obj:it});
   const hc=new Map(),H=async k=>{if(!hc.has(k))hc.set(k,await syncHash(local.get(k).obj));return hc.get(k)};
   const lchg=async k=>(quick&&meta.h[k]!==undefined)?false:(await H(k))!==meta.h[k];
   /* 3. decide per record */
@@ -904,7 +934,7 @@ async function cloudSyncCore(mode,opts){opts=opts||{};
    if(w==='local'&&cw)toPush.add(k);else toPull.add(k)}
   /* 5. pull */
   for(const k of toPull){try{const row=fetched.get(k);if(!row||!row.payload||typeof row.payload!=='object')continue;const i=k.indexOf('/'),type=k.slice(0,i);
-    if(type==='kv'&&!['settings','lists'].includes(row.payload.id))continue;
+    if(type==='kv'&&!['settings','lists'].includes(row.payload.id)&&!String(row.payload.id).startsWith('inspset_'))continue;
     const x=await aqlPhotoFromCloud(row.payload,c);await sput(type,x);meta.h[k]=await syncHash(await DB.get(type,x.id));meta.s[k]=idx.get(k);st.down++;st.changed=true}catch(e){fail(e)}}
   /* 6. push */
   let batch=[];const flush=async()=>{if(!batch.length)return;const r=await c.from(T).upsert(batch.map(b=>b.row),OC);if(r.error)throw r.error;batch.forEach(b=>{meta.h[b.k]=b.lh;meta.s[b.k]=b.stamp;st.up++});batch=[]};
@@ -1211,6 +1241,43 @@ function batchImportCard(onDone){
   h('p',{class:'hint'},L('Pick all the PDF reports (or one ZIP). The inspector name written inside each report is read and the file is sent to that inspector\'s account. On a phone prefer picking the PDFs over one big ZIP.','اختر كل تقارير PDF (أو ملف ZIP واحد). يُقرأ اسم المفتش المكتوب داخل كل تقرير ويُرسل الملف لحساب هذا المفتش. على الموبايل الأفضل اختيار الملفات نفسها بدل ZIP كبير.')),
   h('div',{class:'row wrap'},pickBtn,goBtn),msg,sumEl,mapBox,tbl)}
 
+
+
+/* ===== إعدادات الفحص: منفصلة لكل مفتش (نقاط القياس، أقل صفحات الصور، صورة المفتش) ===== */
+const inspKey=n=>{const s=arNz(n);let x=0x811c9dc5;for(let k=0;k<s.length;k++){x^=s.charCodeAt(k);x=Math.imul(x,0x01000193)>>>0}return 'inspset_'+x.toString(36)};
+function setOf(ins){const g=S.settings||{},r=(S.inspSets||{})[inspKey((ins&&ins.inspectorName)||'')]||{};
+ return{measPoints:r.measPoints||g.measPoints,minDefPages:r.minDefPages!==undefined?r.minDefPages:g.minDefPages,minItemPages:r.minItemPages!==undefined?r.minItemPages:g.minItemPages,avatar:r.avatar!==undefined?r.avatar:g.avatar,own:!!r.id}}
+let INSP_WHO='';
+function vInspSet(){
+ const mgr=isMgr(),me=(S.me&&S.me.name)||'';
+ const names=mgr?[...new Set([me,...inspectorList(),...Object.values(S.inspSets||{}).map(x=>x.for).filter(Boolean)])].filter(Boolean):[me];
+ let who=mgr&&INSP_WHO&&names.includes(INSP_WHO)?INSP_WHO:me;
+ const msg=h('p',{class:'hint'}),cur=setOf({inspectorName:who}),rec0=(S.inspSets||{})[inspKey(who)];let avatar=cur.avatar||'';
+ const mp=cur.measPoints||{},ta=v=>h('textarea',{rows:8,dir:'auto'},v.join('\n'));
+ const jk=ta(mp.jacket||MEASP.jacket),tr=ta(mp.trousers||MEASP.trousers);
+ const def=h('input',{type:'number',min:0,max:6,value:String(cur.minDefPages??2)}),itm=h('input',{type:'number',min:0,max:6,value:String(cur.minItemPages??0)});
+ const img=h('img',{style:'height:64px;border-radius:8px;display:none'}),setImg=v=>{avatar=v||'';if(avatar){img.src=avatar;img.style.display='block'}else{img.removeAttribute('src');img.style.display='none'}};setImg(avatar);
+ const lines=el=>el.value.split('\n').map(x=>x.trim()).filter(Boolean),clamp=el=>Math.max(0,Math.min(6,Math.round(num(el.value))));
+ const save=h('button',{type:'button',class:'btn p',onClick:async e=>{const b=e.currentTarget,j=lines(jk),t2=lines(tr);
+   if(!j.length||!t2.length){msg.textContent=L('Each list needs at least one measurement point.','كل قائمة تحتاج نقطة قياس واحدة على الأقل.');return}
+   b.disabled=true;try{
+    const rec={id:inspKey(who),for:who,measPoints:{...(cur.measPoints||{}),jacket:j,trousers:t2},minDefPages:clamp(def),minItemPages:clamp(itm),avatar,updatedAt:Date.now(),updatedBy:me};
+    await DB.put('kv',rec);S.inspSets=S.inspSets||{};S.inspSets[rec.id]=rec;await audit('inspector_settings_updated',rec.id,{for:who});
+    def.value=String(rec.minDefPages);itm.value=String(rec.minItemPages);
+    msg.textContent=L('Saved for '+who+'. It applies to '+who+'\'s reports and syncs to the cloud.','تم الحفظ لـ'+who+'. يُطبَّق على تقارير '+who+' ويتزامن مع السحابة.');try{cloudAuto(true)}catch(x){}
+   }catch(err){msg.textContent=L('Error: ','خطأ: ')+((err&&err.message)||err)}finally{b.disabled=false}}},'💾 '+L('Save settings','حفظ الإعدادات'));
+ return h('div',{class:'stack'},h('div',{class:'card form'},h('h3',{},'🛠 '+L('Inspection settings','إعدادات الفحص')),
+  mgr&&names.length>1?h('label',{},L('Settings of','إعدادات'),h('select',{onChange:e=>{INSP_WHO=e.target.value;render()}},names.map(n=>h('option',{value:n,selected:n===who},n)))):null,
+  h('p',{class:'hint'},L('These settings belong to '+who+' only and are applied to '+who+'\'s reports.','هذه الإعدادات خاصة بـ'+who+' فقط وتُطبَّق على تقاريره.')+(cur.own?'':' '+L('(Not saved yet: showing the default values.)','(لم تُحفظ بعد: تظهر القيم الافتراضية.)'))),
+  rec0&&rec0.updatedAt?h('p',{class:'hint'},L('Last saved by ','آخر حفظ بواسطة ')+(rec0.updatedBy||'—')+' · '+new Date(rec0.updatedAt).toLocaleString()):null,
+  h('label',{},L('Jacket measurement points (one per line)','نقاط قياس الجاكيت (نقطة في كل سطر)'),jk),
+  h('label',{},L('Trousers measurement points (one per line)','نقاط قياس البنطلون (نقطة في كل سطر)'),tr),
+  h('label',{},L('Minimum pages for "Photos of Defects" (0-6)','أقل عدد صفحات لـ«صور العيوب» (0-6)'),def),
+  h('label',{},L('Minimum pages for "Actual Item" photos (0-6)','أقل عدد صفحات لـ«صور المنتج الفعلي» (0-6)'),itm),
+  h('div',{class:'row wrap'},h('b',{style:'flex:1;font-size:14px'},L('Inspector picture on report','صورة المفتش بالتقرير')),img,
+   h('button',{type:'button',class:'btn s',onClick:()=>pickOne(v=>setImg(v))},L('Upload','رفع')),h('button',{type:'button',class:'btn s',onClick:()=>setImg('')},'🗑')),
+  save,msg))}
+
 function archTabs(cur){const t=(href,k,txt)=>h('a',{href,class:'seg-i'+(cur===k?' on':'')},txt);
  return h('div',{class:'seg noprint'},t('#/archive','archive','🗂 '+L('Inspections','الفحوصات')),t('#/files','files','📎 '+L('Files','الملفات')))}
 
@@ -1291,7 +1358,7 @@ function vSettings(){const s=S.settings;SINGLE.forEach(g=>{s[g]=s[g]||[]});const
       h('label',{class:'chk'},h('input',{type:'checkbox',checked:d.active,onChange:e=>d.active=e.target.checked}),L('Active','مفعّل')),
       h('button',{class:'btn s',onClick:()=>{if(i>0){[s[g][i-1],s[g][i]]=[s[g][i],s[g][i-1]];render()}}},'↑'),h('button',{class:'btn s',onClick:()=>{if(i<s[g].length-1){[s[g][i+1],s[g][i]]=[s[g][i],s[g][i+1]];render()}}},'↓'))),
     h('button',{class:'btn s',onClick:()=>{s[g].push({id:'d_'+uid(6),en:'',ar:'',active:true});render()}},'+ '+L('Add department','إضافة قسم')));
-  return h('div',{class:'stack'},h('div',{class:'card form'},fld(L('Platform name','اسم المنصة'),()=>s.platformName,v=>s.platformName=v),fld(L('Factory name (report templates)','اسم المصنع (قوالب التقارير)'),()=>s.factoryName,v=>s.factoryName=v),h('label',{},L('Jacket measurement points (one per line)','نقاط قياس الجاكيت (نقطة في كل سطر)'),h('textarea',{onInput:e=>{s.measPoints=Object.assign({},s.measPoints||{}, {jacket:e.target.value.split('\n').map(x=>x.trim()).filter(Boolean)})}},((s.measPoints&&s.measPoints.jacket)||MEASP.jacket).join('\n'))),h('label',{},L('Trousers measurement points (one per line)','نقاط قياس البنطلون (نقطة في كل سطر)'),h('textarea',{onInput:e=>{s.measPoints=Object.assign({},s.measPoints||{}, {trousers:e.target.value.split('\n').map(x=>x.trim()).filter(Boolean)})}},((s.measPoints&&s.measPoints.trousers)||MEASP.trousers).join('\n'))),fld(L('Minimum pages for "Photos of Defects" (0-6)','أقل عدد صفحات لـ«صور العيوب» (0-6)'),()=>String(s.minDefPages??2),v=>{s.minDefPages=Math.max(0,Math.min(6,Math.round(num(v))))},{type:'number',min:0,max:6}),fld(L('Minimum pages for "Actual Item" photos (0-6)','أقل عدد صفحات لـ«صور المنتج الفعلي» (0-6)'),()=>String(s.minItemPages??0),v=>{s.minItemPages=Math.max(0,Math.min(6,Math.round(num(v))))},{type:'number',min:0,max:6}),fld(L('Company shown under "From" on the report','الجهة المعروضة في خانة «من» بالتقرير'),()=>s.fromText||'',v=>s.fromText=v,{placeholder:s.factoryName}),imgF(L('Report logo','لوجو التقرير'),'logo'),imgF(L('Inspector picture on report','صورة المفتش بالتقرير'),'avatar'),
+  return h('div',{class:'stack'},h('div',{class:'card form'},fld(L('Platform name','اسم المنصة'),()=>s.platformName,v=>s.platformName=v),fld(L('Factory name (report templates)','اسم المصنع (قوالب التقارير)'),()=>s.factoryName,v=>s.factoryName=v),h('div',{class:'row wrap'},h('span',{class:'hint',style:'flex:1'},L('Measurement points, minimum photo pages and the inspector picture moved to "Inspection settings" (a separate page for each inspector).','نقاط القياس وأقل عدد صفحات الصور وصورة المفتش انتقلت إلى «إعدادات الفحص» (صفحة منفصلة لكل مفتش).')),h('a',{class:'btn s',href:'#/inspset'},'🛠 '+L('Inspection settings','إعدادات الفحص'))),fld(L('Company shown under "From" on the report','الجهة المعروضة في خانة «من» بالتقرير'),()=>s.fromText||'',v=>s.fromText=v,{placeholder:s.factoryName}),imgF(L('Report logo','لوجو التقرير'),'logo'),
       h('div',{class:'card form',style:'margin-top:12px'},h('h3',{},L('Review policy','سياسة المراجعة')),h('label',{class:'chk'},h('input',{type:'checkbox',checked:!!s.requireReview,onChange:e=>s.requireReview=e.target.checked}),L('Manager must approve every inspection, even when AQL gives an automatic result','المدير يعتمد كل فحص، حتى لو أعطت AQL نتيجة تلقائية'))),
       h('div',{class:'card form',style:'margin-top:12px'},h('h3',{},L('Photo timestamp','طابع التاريخ والوقت على الصور')),
         h('label',{class:'chk'},h('input',{type:'checkbox',checked:s.photoStampEnabled!==false,onChange:e=>s.photoStampEnabled=e.target.checked}),L('Burn timestamp into the image permanently','حفظ الطابع داخل الصورة نفسها بشكل دائم')),
@@ -1318,7 +1385,7 @@ const sevColor={critical:'#e00000',major:'#f5a800',minor:'#bf9000'};
 const AVA='<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg"><rect width="80" height="80" fill="#fff"/><path d="M8 80c2-18 14-26 32-26s30 8 32 26z" fill="#1d4e89"/><path d="M34 54l6 10 6-10z" fill="#fff"/><path d="M40 62l-3 18h6z" fill="#c0392b"/><circle cx="40" cy="34" r="14" fill="#f1c27d"/><path d="M26 30c2-12 26-14 28 0-8-6-20-6-28 0z" fill="#3b2a1a"/><circle cx="52" cy="40" r="9" fill="#cfe8ff" fill-opacity=".6" stroke="#333" stroke-width="3"/><path d="M58 47l10 10" stroke="#333" stroke-width="4" stroke-linecap="round"/></svg>';
 const MEASP={jacket:['Waist','Back','Sleeve'],trousers:['Waist','Inseam']},MEASB={jacket:4,trousers:5},MG=[4,4,4,3];
 const measKinds=t=>t==='suit'||t==='both'?['trousers','jacket']:(t==='jacket'||t==='vest')?['jacket']:['trousers'];
-const measPts=k=>((S.settings.measPoints&&S.settings.measPoints[k])||MEASP[k]).filter(Boolean);
+const measPts=k=>((setOf({inspectorName:S.me&&S.me.name}).measPoints||{})[k]||MEASP[k]).filter(Boolean);
 const newBlock=k=>({heads:['','','',''],rows:measPts(k).map(n=>({name:n,tp:'',tm:'',c:Array(15).fill('')}))});
 function ensureMeas(o){o.meas=o.meas||{};measKinds(o.garmentType).forEach(k=>{if(!o.meas[k]||!o.meas[k].length)o.meas[k]=Array.from({length:MEASB[k]},()=>newBlock(k))})}
 const hbwBox=rows=>h('table',{class:'hbwt'},rows.map(([a,b])=>h('tr',{},h('td',{class:'l'},a),h('td',{class:'v'+((typeof b==='string'||typeof b==='number')&&String(b).length>11?' sm':'')},b==null?'':b))));
@@ -1555,7 +1622,7 @@ function reportPages(i,ed){
   const prRows=P.map(([k,en,ar])=>h('tr',{},h('td',{},L(en,ar)),h('td',{class:'n'+tc,onClick:ed?()=>ed.prop(k,'yes'):null},i.props[k]==='yes'?'√':''),h('td',{class:'n'+tc,onClick:ed?()=>ed.prop(k,'no'):null},i.props[k]==='no'?'√':'')));
   while(prRows.length<NR+1)prRows.push(h('tr',{},h('td'),h('td'),h('td')));
   const cl=String(i.comment||'').split('\n');const cm=[];for(let k=0;k<6;k++)cm.push(k<5?(cl[k]||''):cl.slice(5).join(' '));
-  const ava=h('div',{class:'ava'});ava.append(h('img',{src:S.settings.avatar||DEF_AVATAR}));
+  const ava=h('div',{class:'ava'});ava.append(h('img',{src:setOf(i).avatar||DEF_AVATAR}));
   const fw=String(S.settings.factoryName||'').toUpperCase().split(/\s+/).filter(Boolean);
   const logo=h('div',{class:'rlh'},h('img',{class:'rlogo',src:S.settings.logo||DEF_LOGO}),h('div',{class:'rlogotxt'},fw.length>1?fw.map(w=>h('div',{},w)):S.settings.factoryName));
   const procBlock=ed?h('div',{class:'procE','data-live':'proc'},h('div',{class:'ptxt'},ptxt),h('div',{class:'pcs'},pc('critical',L('CRITICAL DEFECTS','عيوب حرجة')),pc('major',L('MAJOR DEFECTS','عيوب رئيسية')),pc('minor',L('MINOR DEFECTS','عيوب ثانوية')))):
@@ -1583,7 +1650,7 @@ function reportPages(i,ed){
       h('div',{class:'ins'},h('div',{class:'ihead'},ava,h('div',{class:'ititle'},L('Inspector','المفتش'))),h('div',{class:'irow'},h('b',{},L('Name.','الاسم.')),h('span',{class:'nm'},ed?ed.inp('inspectorName',{list:'dl-inspectors',autocomplete:'off',readonly:!isMgr()}):i.inspectorName)),h('div',{class:'irow'},h('b',{},L('From.','من.')),h('u',{},S.settings.fromText||S.settings.factoryName)))),
     ed?[h('div',{class:'phead'},T_DEF),ed.defPhotos()]:null,ed?[h('div',{class:'phead'},T_ITEM),ed.itemPhotos()]:null,ed?ed.meas():null);
   const pages=[p1];
-  if(!ed){const pd=padPages(photos,S.settings.minDefPages??2),pi=padPages(ip,S.settings.minItemPages??0);
+  if(!ed){const pd=padPages(photos,setOf(i).minDefPages??2),pi=padPages(ip,setOf(i).minItemPages??0);
     for(let k=0;k<pd.length;k+=15)pages.push(h('div',{class:'rpage'},pblock(pd.slice(k,k+15),T_DEF,defCap)));
     for(let k=0;k<pi.length;k+=15)pages.push(h('div',{class:'rpage'},pblock(pi.slice(k,k+15),T_ITEM,x=>x.cap)));
     if(i.measOn)measPages(i).forEach(x=>pages.push(x))}
@@ -1673,7 +1740,7 @@ async function makeXlsx(i){
   M(13,c0+3,14,c0+3,L('Name:','الاسم:'),{fill:W,border:true,size:10});M(15,c0+3,18,c0+3,i.inspectorName,{fill:W,border:true,color:'000080',h:'center',size:10,shrink:true});
   M(13,c0+4,18,c0+4,'',{fill:W,border:true});M(13,c0+5,14,c0+5,L('From:','من:'),{fill:W,border:true,size:10});M(15,c0+5,18,c0+5,S.settings.fromText||S.settings.factoryName,{fill:W,border:true,u:true,h:'center',size:10,shrink:true});M(13,c0+6,18,c0+6,'',{fill:W,border:true});
   const avW=COLPX*3-4,avH=Math.round((22+24+24)*96/72)-4;
-  const avId=wb.addImage({base64:await cropCover(S.settings.avatar||DEF_AVATAR,avW,avH),extension:'jpeg'});ws.addImage(avId,{tl:{col:12,row:c0-1},br:{col:15,row:c0+2},editAs:'twoCell'});
+  const avId=wb.addImage({base64:await cropCover(setOf(i).avatar||DEF_AVATAR,avW,avH),extension:'jpeg'});ws.addImage(avId,{tl:{col:12,row:c0-1},br:{col:15,row:c0+2},editAs:'twoCell'});
   let row=c0+8;const breaks=[c0+6];
   /* photo pages: header + 5 rows x 3 photos, 36 rows per page like the factory sheet */
   const blocks=[[1,6],[8,12],[14,18]];
@@ -1686,9 +1753,9 @@ async function makeXlsx(i){
           const id=wb.addImage({base64:await cropCover(it.p,w,h),extension:'jpeg'});ws.addImage(id,{tl:{col:c1-1,row:row-1},br:{col:c2,row:row+5},editAs:'twoCell'})}}
         row+=7}
       breaks.push(row-1)}}
-  const photos=padPages(mapDefPhotos(i),S.settings.minDefPages??2);
+  const photos=padPages(mapDefPhotos(i),setOf(i).minDefPages??2);
   await photoPages(L('Photos of Defects','صور العيوب'),photos,x=>({richText:[{text:x.name+' ',font:{name:'Calibri',size:8,bold:true}},...(x.sev?[{text:'('+L(...sevL[x.sev])+')',font:{name:'Calibri',size:8,color:{argb:'FFF5A800'}}}]:[])]}));
-  await photoPages(L('Photos Presenting The Actual Item','صور المنتج الفعلي'),padPages((i.itemPhotos||[]).map(x=>({p:x.p,cap:x.cap||''})),S.settings.minItemPages??0),x=>x.cap||'');
+  await photoPages(L('Photos Presenting The Actual Item','صور المنتج الفعلي'),padPages((i.itemPhotos||[]).map(x=>({p:x.p,cap:x.cap||''})),setOf(i).minItemPages??0),x=>x.cap||'');
   if(i.measOn){const logoX=wb.addImage({base64:S.settings.logo||DEF_LOGO,extension:'jpeg'}),nv=v=>(v!==''&&v!=null&&!isNaN(+v))?+v:(v||'');
     for(const k of measKinds(i.garmentType)){const blocks=(i.meas&&i.meas[k])||[],per=k==='trousers'?5:4;
       for(let st=0;st<Math.max(blocks.length,1);st+=per){
