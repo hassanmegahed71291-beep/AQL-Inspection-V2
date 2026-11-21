@@ -171,7 +171,7 @@ function vList(rep){const F={q:'',st:'',g:'',cu:'',ins:'',rd:'',ty:''};const box
         :[h('button',{type:'button',class:'btn s p',onClick:e=>{e.stopPropagation();go('#/i/'+i.id)}},'📂 '+L('Open','فتح')),
           (isMgr()||(mine(i)&&EDIT.includes(i.status)))?h('button',{type:'button',class:'btn s d',onClick:e=>{e.stopPropagation();toTrash(i)}},'🗑 '+L('Delete','مسح')):null]))):[h('div',{class:'card empty'},h('h2',{},trash?L('Trash is empty','السلة فارغة'):L('No inspections found','لا توجد فحوصات')))]))};
   fill();
-  return h('div',{},rep?null:archTabs('archive'),h('div',{class:'row wrap'},h('input',{placeholder:L('Search ID, order, customer, model, inspector','ابحث بالرقم أو الطلبية أو العميل أو الموديل أو المفتش'),onInput:e=>{F.q=e.target.value;fill()}}),
+  return h('div',{},rep?null:archTabs('archive'),rep?null:pdfImportCard(),h('div',{class:'row wrap'},h('input',{placeholder:L('Search ID, order, customer, model, inspector','ابحث بالرقم أو الطلبية أو العميل أو الموديل أو المفتش'),onInput:e=>{F.q=e.target.value;fill()}}),
     h('select',{onChange:e=>{F.st=e.target.value;fill()}},h('option',{value:''},L('All statuses','كل الحالات')),['draft','in_progress','pending_review','approved','rejected'].map(s=>h('option',{value:s},stL(s)))),
     h('select',{onChange:e=>{F.rd=e.target.value;fill()}},h('option',{value:''},L('All inspection counts','كل مرات الفحص')),RND_OPTS().map(([v,t])=>h('option',{value:v},t))),
     h('select',{onChange:e=>{F.ty=e.target.value;fill()}},h('option',{value:''},L('All inspection types','كل أنواع الفحص')),TYPE_OPTS().map(([v,t])=>h('option',{value:v},t))),
@@ -1278,6 +1278,109 @@ function vInspSet(){
    h('button',{type:'button',class:'btn s',onClick:()=>pickOne(v=>setImg(v))},L('Upload','رفع')),h('button',{type:'button',class:'btn s',onClick:()=>setImg('')},'🗑')),
   save,msg))}
 
+/* ===== استيراد تقارير PDF إلى الفحوصات: بيانات مضمّنة (دقيقة) أو قراءة بصرية OCR (للتقارير القديمة) ===== */
+let PDFIMP_W=null,TESS_LIB=null;
+function pdfImpLoadTess(){if(window.Tesseract)return Promise.resolve();
+ return TESS_LIB||(TESS_LIB=new Promise((res,rej)=>{const s=document.createElement('script');s.src='./vendor/tess/tesseract.min.js';s.onload=res;s.onerror=()=>{TESS_LIB=null;rej(new Error(L('Could not load the reader. Open the app once while online, then try again.','تعذر تحميل محرك القراءة. افتح التطبيق مرة بالإنترنت ثم أعد المحاولة.')))};document.head.append(s)}))}
+async function pdfImpWorker(){if(PDFIMP_W)return PDFIMP_W;await pdfImpLoadTess();const base=new URL('./vendor/tess/',location.href).href;
+ PDFIMP_W=await Tesseract.createWorker('eng',1,{workerPath:base+'worker.min.js',corePath:base,langPath:base});return PDFIMP_W}
+async function pdfImpRecog(a,w,h,psm,wl){const W=await pdfImpWorker(),pw=w+48,ph=h+48,c=document.createElement('canvas');c.width=pw;c.height=ph;const ctx=c.getContext('2d'),id=ctx.createImageData(pw,ph),d=id.data;d.fill(255);
+ for(let y=0;y<h;y++){let o=((y+24)*pw+24)*4,s=y*w;for(let x=0;x<w;x++){const v=a[s+x];d[o]=v;d[o+1]=v;d[o+2]=v;o+=4}}
+ ctx.putImageData(id,0,0);await W.setParameters({tessedit_pageseg_mode:String(psm),tessedit_char_whitelist:wl||''});const r=await W.recognize(c);return(r&&r.data&&r.data.text)||''}
+/*PDFIMP-EXTRACT-START*/
+async function pdfImpExtract(G,W,H,rec){
+ const f=W/2382,S2=v=>Math.round(v*f),X={ok:false,defects:[],props:{},tot:null};
+ const frac=(x0,y0,x1,y1,thr)=>{x0=S2(x0);y0=S2(y0);x1=Math.min(W,S2(x1));y1=Math.min(H,S2(y1));let n=0,t=0;for(let y=y0;y<y1;y++){const o=y*W;for(let x=x0;x<x1;x++){t++;if(G[o+x]<thr)n++}}return t?n/t:0};
+ const lod=(x0,y0,x1,y1)=>{x0=S2(x0);y0=S2(y0);x1=Math.min(W,S2(x1));y1=Math.min(H,S2(y1));const w=x1-x0,h=y1-y0,a=new Uint8Array(w*h);for(let y=0;y<h;y++){const o=(y0+y)*W+x0;for(let x=0;x<w;x++)a[y*w+x]=G[o+x]>150?0:255}return{a,w,h}};
+ const dol=(x0,y0,x1,y1,thr,pad)=>{x0=S2(x0);y0=S2(y0);x1=Math.min(W,S2(x1));y1=Math.min(H,S2(y1));let mx=1e9,my=1e9,Mx=-1,My=-1,n=0;
+  for(let y=y0;y<y1;y++){const o=y*W;for(let x=x0;x<x1;x++)if(G[o+x]<thr){n++;if(x<mx)mx=x;if(x>Mx)Mx=x;if(y<my)my=y;if(y>My)My=y}}
+  if(n<Math.max(8,Math.round(12*f*f)))return null;const p=Math.round(pad*f),bx=Math.max(x0,mx-p),by=Math.max(y0,my-p),bX=Math.min(x1-1,Mx+p),bY=Math.min(y1-1,My+p),w=bX-bx+1,h=bY-by+1,a=new Uint8Array(w*h);
+  for(let y=0;y<h;y++){const o=(by+y)*W+bx;for(let x=0;x<w;x++)a[y*w+x]=G[o+x]<thr?0:255}return{a,w,h}};
+ const txt=async(m,psm,wl)=>m?String(await rec(m.a,m.w,m.h,psm,wl)).replace(/\s+/g,' ').trim():'';
+ const title=await txt(dol(120,285,1100,365,130,14),7);X.title=title;
+ if(!/INSPECT|REPORT/i.test(title)&&frac(132,380,824,547,100)<0.3){X.unsupported=true;return X}
+ const boxes=[[132,824],[861,1345],[1383,1797],[1834,2249]],rows=[[380,435],[437,492],[494,547]],names=[['customer','poCustomer','model'],['item','style','salesOrder'],['orderQty','actualQty','packing'],['date']];
+ for(let b=0;b<4;b++)for(let r=0;r<rows.length;r++){if(b===3&&r>0)continue;const w=boxes[b][1]-boxes[b][0],m=lod(boxes[b][0]+Math.round(w*0.40),rows[r][0]+5,boxes[b][1]-8,rows[r][1]-5);let t=await txt(m,7);
+  if(['orderQty','actualQty','packing'].includes(names[b][r])){const d=t.match(/\d[\d,]*/g);t=d?d[d.length-1].replace(/,/g,''):''}X[names[b][r]]=t}
+ const cols=[[790,960],[968,1138],[1146,1314]],cnt=async(top,bot,c)=>{const m=dol(cols[c][0]+25,top+10,cols[c][1]-25,bot-8,130,14);if(!m)return 0;const t=await txt(m,10,'0123456789');const d=t.match(/\d+/);return d?parseInt(d[0],10):0};
+ for(let k=0;k<15;k++){const top=1169+57*k,bot=1220+57*k,nm=await txt(dol(150,top+8,772,bot-6,130,14),7),cc=[await cnt(top,bot,0),await cnt(top,bot,1),await cnt(top,bot,2)];
+  if(nm&&nm.length>1&&(cc[0]||cc[1]||cc[2]))X.defects.push({name:nm.replace(/[|_]+/g,'').trim(),c:cc[0],m:cc[1],n:cc[2]});else if(!nm&&(cc[0]||cc[1]||cc[2]))X.defects.push({name:'',c:cc[0],m:cc[1],n:cc[2]})}
+ X.tot=[await cnt(2026,2073,0),await cnt(2026,2073,1),await cnt(2026,2073,2)];
+ ['packaging','labeling','spec','approvedSample','measurement','visual'].forEach((key,k)=>{const top=1169+57*k,bot=1220+57*k,c=frac(1830,top+8,2000,bot-6,110),n=frac(2030,top+8,2236,bot-6,110);if(c>0.006||n>0.006)X.props[key]=c>=n?'yes':'no'});
+ const dk=(x0,x1)=>frac(x0,2211,x1,2318,45),res=[['pass',dk(308,661)],['fail',dk(952,1429)],['pending',dk(1662,2131)]].sort((a,b)=>b[1]-a[1]);X.result=res[0][1]>0.002?res[0][0]:'pending';
+ X.inspector=(await txt(dol(1780,2716,2240,2772,130,14),7)).replace(/^[^A-Za-z\u0600-\u06FF]+/,'');
+ const cm=[];for(let k=0;k<6;k++){const y0=2524+72*k+14,y1=2524+72*(k+1)-14;if(frac(160,y0,1280,y1,130)>0.004){const t=await txt(dol(160,y0,1280,y1,130,14),7);if(/[A-Za-z\u0600-\u06FF]{3}/.test(t))cm.push(t)}}X.comment=cm.join('\n');
+ X.ok=!!(X.customer||X.poCustomer);return X}
+/*PDFIMP-EXTRACT-END*/
+const PDFIMP_G={JACKET:'jacket',TROUSER:'trousers',VEST:'vest',WAISTCOAT:'vest',SHORT:'shorts',SUIT:'suit'};
+function pdfImpLev(a,b){const m=a.length,n=b.length;if(!m)return n;if(!n)return m;let p=Array.from({length:n+1},(_,j)=>j);for(let i=1;i<=m;i++){const c=[i];for(let j=1;j<=n;j++)c[j]=Math.min(p[j]+1,c[j-1]+1,p[j-1]+(a[i-1]===b[j-1]?0:1));p=c}return p[n]}
+function pdfImpDefMatch(name){const n=arNz(name);if(!n)return null;let best=null,bs=0;for(const l of S.lib){for(const c of[l.nameEn,l.nameAr]){const m=arNz(c);if(!m)continue;const sc=m===n?1:1-pdfImpLev(m,n)/Math.max(m.length,n.length);if(sc>bs){bs=sc;best=l}}}return bs>=0.8?best:null}
+function pdfImpDate(s){s=String(s||'');const M=['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];let m=s.match(/(\d{1,2})\s*[-\/ .]\s*([A-Za-z]{3,})\s*[-\/ .]\s*(\d{4})/);if(m){const k=M.indexOf(m[2].slice(0,3).toLowerCase());if(k>=0)return`${m[3]}-${String(k+1).padStart(2,'0')}-${m[1].padStart(2,'0')}`}
+ m=s.match(/(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})/);if(m)return`${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;return''}
+function pdfImpAql(ins){const cnt={critical:0,major:0,minor:0};(ins.defs||[]).forEach(d=>{if(cnt[d.severity]!==undefined)cnt[d.severity]+=num(d.pieces)});const lot=num(ins.actualQty)||num(ins.orderQty);ins.lotSize=lot?String(lot):'';
+ const plan=activePlan(),ev=evaluate(plan,lot,cnt);if(ev.status==='ok'){ins.sampleSize=String(ev.sampleSize);ins.aql={planId:plan.id,planName:plan.name,version:plan.version,verified:!!plan.verified,countBasis:plan.countBasis,procedure:plan.procedure||'',sampleSize:ev.sampleSize,cats:ev.cats,result:ev.result,authoritative:ev.authoritative,at:new Date().toISOString()}}else ins.aql=null;return ev}
+function pdfImpSetResult(ins,res){if(res==='pass'){ins.status='approved';ins.result='accepted'}else if(res==='fail'){ins.status='rejected';ins.result='rejected'}else{ins.status='in_progress';ins.result=null}}
+function pdfImpDup(ins){const k=norm(ins.orderNo),d=String(ins.date||'').slice(0,10),n=arNz(ins.inspectorName);return S.ins.some(x=>x.id===ins.id||(norm(x.orderNo)===k&&String(x.date||'').slice(0,10)===d&&arNz(x.inspectorName)===n))}
+function pdfImpBuild(x,file){const notes=[],itemU=String(x.item||'').toUpperCase().replace(/[^A-Z]/g,'');let g='';for(const k of Object.keys(PDFIMP_G))if(itemU.includes(k)){g=PDFIMP_G[k];break}
+ if(!g){g='jacket';notes.push(L('Garment type not recognised: set to Jacket.','لم يُتعرَّف على نوع القطعة: تم اختيار جاكيت.'))}
+ const d=pdfImpDate(x.date);if(!d)notes.push(L('Date not read: today’s date used.','لم يُقرأ التاريخ: استُخدم تاريخ اليوم.'));const day=d||nowLocal().slice(0,10);
+ const names=inspectorList(),nz=arNz(x.inspector);let insp=names.find(n=>arNz(n)===nz)||names.find(n=>nz&&(arNz(n).includes(nz)||nz.includes(arNz(n))))||'';if(!insp){insp=x.inspector||(S.me&&S.me.name)||'';if(x.inspector)notes.push(L('Inspector “'+x.inspector+'” is not a registered member.','المفتش «'+x.inspector+'» غير مسجّل كعضو.'))}
+ if(!isMgr())insp=(S.me&&S.me.name)||insp;const mem=S.members.find(m=>arNz(m.name)===arNz(insp));
+ const ins={...newIns(),orderNo:x.poCustomer||x.salesOrder||'',customer:x.customer||'',model:x.model||'',garmentType:g,orderQty:x.orderQty||'',actualQty:x.actualQty||'',poCustomer:x.poCustomer||'',style:x.style||'',salesOrder:x.salesOrder||'',packingPct:x.packing||'',
+  date:day+'T09:00',createdAt:new Date(day+'T09:00:00').getTime()||Date.now(),updatedAt:Date.now(),inspectorName:insp,createdBy:isMgr()?(mem?mem.id:(S.me?S.me.id:'')):(S.me?S.me.id:''),comment:x.comment||'',props:{...x.props},decisionNote:L('Imported from PDF report','مستورد من تقرير PDF'),history:[{at:Date.now(),by:(S.me&&S.me.name)||'',action:'imported_pdf'}]};
+ let unk=0;const gOk=g==='suit'?['jacket','trousers']:[g];
+ x.defects.forEach(df=>{const l=pdfImpDefMatch(df.name);if(!l)unk++;[['critical',df.c],['major',df.m],['minor',df.n]].forEach(([sev,c])=>{if(c>0)ins.defs.push({id:'d_'+uid(8),garment:(l&&(l.garments||[]).find(q=>gOk.includes(q)))||gOk[0],deptId:'',deptName:'',deptAr:'',defectId:l?l.id:'IMP-'+norm(df.name).slice(0,20),code:l?l.code:'',nameEn:l?l.nameEn:df.name,nameAr:l?l.nameAr:'',severity:sev,pieces:c,occurrences:c,description:'',photos:[],corrective:'',responsible:'',followUp:'none',reinspection:''})})});
+ if(unk)notes.push(L(unk+' defect name(s) not found in the library (kept as written).','عدد '+unk+' من أسماء العيوب غير موجود في المكتبة (تُرك كما كُتب).'));
+ const sums=[0,0,0];x.defects.forEach(df=>{sums[0]+=df.c;sums[1]+=df.m;sums[2]+=df.n});if(x.tot&&(x.tot[0]!==sums[0]||x.tot[1]!==sums[1]||x.tot[2]!==sums[2]))notes.push(L('Defect counts do not match the report totals: check them.','أعداد العيوب لا تطابق إجمالي التقرير: راجعها.'));
+ if(!/^\d+$/.test(String(x.orderQty||'')))notes.push(L('Quantity not read.','لم تُقرأ الكمية.'));if(!/^\d+$/.test(String(x.actualQty||'')))notes.push(L('Actual quantity not read.','لم تُقرأ الكمية الفعلية.'));if(!ins.orderNo)notes.push(L('Order number not read.','لم يُقرأ رقم الطلبية.'));
+ const ev=pdfImpAql(ins);pdfImpSetResult(ins,x.result);if(ev&&ev.result&&x.result!=='pending'&&ev.result!==x.result)notes.push(L('The AQL plan in the app gives '+ev.result.toUpperCase()+' but the report says '+x.result.toUpperCase()+'.','خطة AQL في التطبيق تعطي '+ev.result.toUpperCase()+' بينما التقرير يقول '+x.result.toUpperCase()+'.'));
+ return{ins,notes}}
+async function pdfEmbed(i){try{const lib=await loadFflate(),strip=v=>typeof v==='string'?(v.startsWith('data:')?'':v):Array.isArray(v)?v.map(strip):v&&typeof v==='object'?Object.fromEntries(Object.entries(v).map(([k,x])=>[k,strip(x)])):v,j=JSON.stringify(strip(i)),b=lib.zlibSync(lib.strToU8(j),{level:6});let s='';for(let k=0;k<b.length;k+=0x8000)s+=String.fromCharCode.apply(null,b.subarray(k,k+0x8000));return'AQLDATA1:'+btoa(s)}catch(e){return''}}
+async function pdfImpRead(file,progress){
+ const lib=await cmpPdfjs(),doc=await lib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;
+ try{let kw='';try{const m=await doc.getMetadata();kw=(m&&m.info&&m.info.Keywords)||''}catch(e){}
+  if(/^AQLDATA1:/.test(kw)){try{const f=await loadFflate(),bin=atob(kw.slice(9)),u=new Uint8Array(bin.length);for(let k=0;k<bin.length;k++)u[k]=bin.charCodeAt(k);const ins=JSON.parse(f.strFromU8(f.unzlibSync(u)));
+    ['defs'].forEach(k=>(ins[k]||[]).forEach(d=>{d.photos=(d.photos||[]).filter(p=>p&&p.p)}));['itemPhotos','defPhotos'].forEach(k=>{ins[k]=(ins[k]||[]).filter(p=>p&&p.p)});
+    if(!isMgr()){ins.inspectorName=(S.me&&S.me.name)||ins.inspectorName;ins.createdBy=S.me?S.me.id:ins.createdBy}
+    ins.updatedAt=Date.now();return{ins,notes:[L('Exact data found inside the PDF (photos are not included).','بيانات دقيقة مضمّنة في الـPDF (الصور غير متضمّنة).')],exact:true}}catch(e){}}
+  progress(L('Rendering page…','تجهيز الصفحة…'));const pg=await doc.getPage(1),v0=pg.getViewport({scale:1}),vp=pg.getViewport({scale:2382/v0.width}),cv=document.createElement('canvas');cv.width=Math.round(vp.width);cv.height=Math.round(vp.height);const cx=cv.getContext('2d',{willReadFrequently:true});cx.fillStyle='#fff';cx.fillRect(0,0,cv.width,cv.height);await pg.render({canvasContext:cx,viewport:vp}).promise;
+  const id=cx.getImageData(0,0,cv.width,cv.height),d=id.data,G=new Uint8Array(cv.width*cv.height);for(let k=0,j=0;k<G.length;k++,j+=4)G[k]=(d[j]*299+d[j+1]*587+d[j+2]*114)/1000|0;cv.width=cv.height=1;
+  progress(L('Reading the report…','قراءة التقرير…'));const x=await pdfImpExtract(G,id.width,id.height,pdfImpRecog);if(x.unsupported)return{error:L('Not a supported English report (Arabic or a different layout).','ليس تقريراً إنجليزياً مدعوماً (عربي أو شكل مختلف).')};if(!x.ok)return{error:L('Could not read the report header.','تعذرت قراءة بيانات التقرير.')};
+  return pdfImpBuild(x,file)}finally{try{doc.destroy()}catch(e){}}}
+function pdfImportCard(){
+ let items=[],busy=false,stop=false;const msg=h('p',{class:'hint cloud-msg'}),list=h('div',{class:'list'}),goBtn=h('button',{type:'button',class:'btn p',style:'display:none'},''),stopBtn=h('button',{type:'button',class:'btn s d',style:'display:none'},'⏹ '+L('Stop','إيقاف'));
+ const say=(en,ar)=>{msg.textContent=L(en,ar)},sayErr=e=>{msg.textContent=L('Error: ','خطأ: ')+((e&&e.message)||e)};
+ const sevTxt=i=>{const c=[0,0,0];(i.defs||[]).forEach(d=>{const k=['critical','major','minor'].indexOf(d.severity);if(k>=0)c[k]+=num(d.pieces)});return c.join(' / ')};
+ const resOf=i=>i.status==='approved'?'pass':i.status==='rejected'?'fail':'pending';
+ const redo=it=>{pdfImpAql(it.ins);it.dup=pdfImpDup(it.ins);if(it.dup)it.sel=false;render()};
+ const field=(it,lb,key,type)=>h('label',{},lb,h('input',{type:type||'text',value:type==='date'?String(it.ins.date||'').slice(0,10):it.ins[key]||'',onChange:e=>{const v=e.target.value;if(type==='date'){it.ins.date=(v||String(it.ins.date).slice(0,10))+'T09:00';it.ins.createdAt=new Date(it.ins.date).getTime()||it.ins.createdAt}else{it.ins[key]=v;if(key==='orderNo')it.ins.poCustomer=v}redo(it)}}));
+ const row=it=>{const i=it.ins;if(it.error)return h('div',{class:'card frow'},h('div',{class:'fmain'},h('span',{class:'ficon'},'⛔'),h('div',{style:'min-width:0;flex:1'},h('b',{class:'fname'},it.file.name),h('div',{class:'warn'},it.error))));
+  const edit=it.open?h('div',{class:'form'},field(it,L('Order No.','رقم الطلبية'),'orderNo'),field(it,L('Customer','العميل'),'customer'),field(it,L('Model','الموديل'),'model'),field(it,L('Quantity','الكمية'),'orderQty','number'),field(it,L('Actual quantity','الكمية الفعلية'),'actualQty','number'),field(it,L('Date','التاريخ'),'date','date'),
+   h('label',{},L('Result','النتيجة'),h('select',{onChange:e=>{pdfImpSetResult(i,e.target.value);redo(it)}},['pass','fail','pending'].map(r=>h('option',{value:r,selected:resOf(i)===r},r.toUpperCase())))),
+   isMgr()?h('label',{},L('Inspector','المفتش'),h('select',{onChange:e=>{i.inspectorName=e.target.value;const m=S.members.find(x=>x.name===e.target.value);if(m)i.createdBy=m.id;redo(it)}},[...new Set([i.inspectorName,...inspectorList()])].filter(Boolean).map(n=>h('option',{value:n,selected:n===i.inspectorName},n)))):null):null;
+  return h('div',{class:'card frow'},h('div',{class:'fmain'},h('input',{type:'checkbox',checked:it.sel,disabled:it.dup,onChange:e=>{it.sel=e.target.checked;sum()}}),h('div',{style:'min-width:0;flex:1'},h('b',{class:'fname'},(i.orderNo||'—')+' · '+(i.customer||'—')),
+   h('div',{class:'hint'},[fmtDate(i.date),gName(i.garmentType),resOf(i)==='pass'?'✅ PASS':resOf(i)==='fail'?'❌ FAIL':'⏳ PENDING',L('Qty ','الكمية ')+(i.orderQty||'—'),L('Defects ','العيوب ')+sevTxt(i),'👤 '+(i.inspectorName||'—')].join(' · ')),
+   h('div',{class:'hint'},(i.defs||[]).map(d=>(S.lang==='ar'?(d.nameAr||d.nameEn):(d.nameEn||d.nameAr))+' ×'+d.pieces).join(' · ')||L('No defects','لا عيوب')),
+   h('div',{class:'hint'},'📄 '+it.file.name),it.dup?h('div',{class:'warn'},L('Already in the archive: skipped.','موجود مسبقاً في الأرشيف: سيُتخطى.')):null,(it.notes||[]).map(n=>h('div',{class:'warn'},'⚠ '+n)))),
+   h('div',{class:'fbtns'},h('button',{type:'button',class:'btn s',onClick:()=>{it.open=!it.open;render()}},'✏️ '+L('Edit','تعديل'))),edit)};
+ const sum=()=>{const n=items.filter(x=>x.sel&&!x.error).length;goBtn.style.display=items.length&&!busy?'':'none';goBtn.disabled=!n;goBtn.textContent='⬇ '+L('Import '+n+' inspection(s)','استيراد '+n+' فحص')};
+ const render=()=>{list.replaceChildren(...items.map(row));sum()};
+ const readAll=async files=>{const pdfs=await expandPicked(files,t=>say(t,t));if(!pdfs.length){say('No PDF files found.','لا توجد ملفات PDF.');return}
+  items=[];stop=false;stopBtn.style.display='';render();
+  for(let k=0;k<pdfs.length&&!stop;k++){const f=pdfs[k],pr=t=>{msg.textContent=(k+1)+'/'+pdfs.length+' · '+f.name+' · '+t};pr(L('Opening…','فتح…'));
+   try{const r=await pdfImpRead(f,pr);if(r.error)items.push({file:f,error:r.error});else{const dup=pdfImpDup(r.ins);items.push({file:f,ins:r.ins,notes:r.notes,sel:!dup,dup,atch:true,open:false})}}catch(e){items.push({file:f,error:(e&&e.message)||String(e)})}render()}
+  stopBtn.style.display='none';say(stop?'Stopped. Review what was read, then import.':'Done reading. Review, fix anything wrong with ✏️, then import.',stop?'تم الإيقاف. راجع ما اتقرأ ثم استورد.':'انتهت القراءة. راجع وصحّح أي خطأ بزر ✏️ ثم استورد.')};
+ const run=async fn=>{if(busy)return;busy=true;sum();try{await fn()}catch(e){sayErr(e)}finally{busy=false;stopBtn.style.display='none';sum()}};
+ stopBtn.onclick=()=>{stop=true};
+ goBtn.onclick=()=>run(async()=>{const sel=items.filter(x=>x.sel&&!x.error&&!x.dup);let ok=0,fail=0;
+  for(const it of sel){try{const ins=it.ins;ins.updatedAt=Date.now();ins.importedFrom=it.file.name;await DB.put('inspections',ins);await audit('inspection_imported',ins.id,{file:it.file.name});if(it.atch)await fileAddRecs([it.file],{insId:ins.id,orderNo:ins.orderNo});it.dup=true;it.sel=false;ok++}catch(e){fail++;it.error=(e&&e.message)||String(e)}msg.textContent=L('Importing ','جارٍ الاستيراد ')+(ok+fail)+'/'+sel.length}
+  await loadAll();try{cloudAuto(true)}catch(e){}say('Imported '+ok+' inspection(s)'+(fail?', failed '+fail:'')+'. They now appear in the archive, monthly report and charts.','تم استيراد '+ok+' فحص'+(fail?'، فشل '+fail:'')+'. ظهروا الآن في الأرشيف والتقرير الشهري والرسوم.');render()});
+ const pickBtn=h('button',{type:'button',class:'btn',onClick:()=>{const i=document.createElement('input');i.type='file';i.multiple=true;i.accept='.pdf,.zip,application/pdf,application/zip';i.onchange=()=>run(()=>readAll([...i.files]));i.click()}},'📥 '+L('Choose report PDFs or a ZIP','اختيار تقارير PDF أو ملف مضغوط'));
+ render();
+ return h('div',{class:'card form noprint'},h('h3',{},'📥 '+L('Import report PDFs as inspections','استيراد تقارير PDF كفحوصات')),
+  h('p',{class:'hint'},L('Pick PDF reports made by the app. Each one becomes a finished inspection (archive, monthly report, charts). Reports exported from now on carry their exact data; older ones are read visually, so review before importing. Photos stay in the attached PDF.','اختر تقارير PDF اللي عملها التطبيق. كل تقرير يتحول لفحص كامل (الأرشيف والتقرير الشهري والرسوم). التقارير الجديدة بتحمل بياناتها بدقة، والقديمة بتتقرا بصرياً فراجعها قبل الاستيراد. الصور تفضل داخل الـPDF المرفق.')),
+  h('div',{class:'row wrap'},pickBtn,goBtn,stopBtn),msg,list)}
+
 function archTabs(cur){const t=(href,k,txt)=>h('a',{href,class:'seg-i'+(cur===k?' on':'')},txt);
  return h('div',{class:'seg noprint'},t('#/archive','archive','🗂 '+L('Inspections','الفحوصات')),t('#/files','files','📎 '+L('Files','الملفات')))}
 
@@ -1814,7 +1917,7 @@ async function makePdf(i){if(!window.jspdf||!window.html2canvas)throw new Error(
   const pdf=new window.jspdf.jsPDF({unit:'mm',format:'a4',orientation:'portrait',compress:true});const stage=h('div',{class:'stage',style:'position:fixed;left:-12000px;top:0;width:794px'});document.body.append(stage);
   try{const pages=reportPages(i);for(let k=0;k<pages.length;k++){stage.replaceChildren(pages[k]);try{await document.fonts.load("700 12px CalibriX");await document.fonts.load("400 12px CalibriX");await document.fonts.ready}catch(e){}await new Promise(r=>setTimeout(r,80));
     const c=await window.html2canvas(pages[k],{scale:3,backgroundColor:'#ffffff',useCORS:true,logging:false});if(k)pdf.addPage();pdf.addImage(c.toDataURL('image/jpeg',.93),'JPEG',0,0,210,297,undefined,'FAST')}}
-  finally{stage.remove()}return pdf.output('blob')}
+  finally{stage.remove()}try{const kw=await pdfEmbed(i);if(kw)pdf.setProperties({keywords:kw})}catch(e){}return pdf.output('blob')}
 function vReport(){const id=ROUTE.split('/')[2],i=S.ins.find(x=>x.id===id);if(!i||(!isMgr()&&!mine(i)))return h('div',{class:'card empty'},h('h2',{},L('Inspection not found','الفحص غير موجود')));
   const z=Math.min(1,(innerWidth-(innerWidth>=900?300:24))/794);const pages=reportPages(i);pages.forEach(p=>p.style.zoom=z);
   const resultSuffix=['approved','rejected'].includes(i.status)?(i.result==='accepted'?'PASS':'FAIL'):'PENDING';
