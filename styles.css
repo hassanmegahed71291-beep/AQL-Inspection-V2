@@ -306,3 +306,37 @@ html[data-theme="dark"] .libitem .sevchip.minor{background:#4a3f0e;color:#fde68a
 .libitem .libadd{white-space:nowrap}.libitem .libadd.dim{opacity:.55}
 html[data-theme="dark"] .libreport{background:#12304a;color:#bae6fd}
 html[data-theme="dark"] .libreport.off{background:#16263d;color:var(--mute)}
+
+/* ---------- فلاتر متعددة الاختيار ---------- */
+.msb{white-space:nowrap}
+.msb.on{background:#1e4b8f;border-color:#1e4b8f;color:#fff}
+.msov{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9000;display:flex;align-items:flex-end;justify-content:center}
+.mssheet{background:#fff;color:var(--ink);width:100%;max-width:480px;max-height:82vh;border-radius:18px 18px 0 0;padding:14px;display:flex;flex-direction:column;gap:10px;box-shadow:0 -8px 30px rgba(0,0,0,.25)}
+.mssheet input[type=search],.mssheet>input{min-height:44px;border-radius:12px;border:1px solid var(--line);padding:0 12px;background:#fff;color:var(--ink)}
+.mslist{overflow-y:auto;flex:1;min-height:120px;border:1px solid var(--line);border-radius:12px}
+.msrow{display:flex;align-items:center;gap:12px;padding:11px 12px;border-bottom:1px solid var(--line);cursor:pointer;font-size:16px}
+.msrow:last-child{border-bottom:0}
+.msrow input{width:22px;height:22px;flex:0 0 auto}
+@media(min-width:700px){.msov{align-items:center}.mssheet{border-radius:18px}}
+html[data-theme="dark"] .mssheet{background:#121e30}
+html[data-theme="dark"] .mssheet>input{background:#0e1726;color:var(--ink)}
+html[data-theme="dark"] .msb.on{background:#2563eb;border-color:#2563eb}
+.badge.ot{background:#fef3c7;color:#92400e;border-color:#fcd34d}
+html[data-theme="dark"] .badge.ot{background:#4a3410;color:#fde68a;border-color:#7a5a1a}
+
+/* ---------- مقارنة العملاء ---------- */
+.ccbars{display:flex;gap:12px;align-items:flex-start;padding:8px 2px 0}
+.ccbar{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center}
+.ccplot{height:210px;width:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:4px;border-bottom:2px solid var(--line)}
+.ccplot b{font-size:15px}
+.ccfill{width:100%;max-width:72px;border-radius:8px 8px 0 0}
+.ccbar span{margin-top:6px;font-size:13px;line-height:1.3;text-align:center;overflow-wrap:anywhere;font-weight:600}
+.cctbl{overflow-x:auto}
+.cctbl table{width:100%;border-collapse:collapse;min-width:420px}
+.cctbl th,.cctbl td{padding:10px 8px;border-bottom:1px solid var(--line);text-align:center;vertical-align:top}
+.cctbl thead th{background:#eef2f7;font-size:14px}
+.cctbl tbody th{text-align:start;font-weight:700;white-space:nowrap;background:transparent}
+.cctop div{font-size:13px;white-space:nowrap;text-align:start}
+.ccnote{background:#f0f9ff;border-color:#bae6fd}.ccnote p{margin:6px 0;font-size:16px;line-height:1.55}
+html[data-theme="dark"] .cctbl thead th{background:#16263d}
+html[data-theme="dark"] .ccnote{background:#12304a;border-color:#1e4b6e}
