@@ -340,3 +340,12 @@ html[data-theme="dark"] .badge.ot{background:#4a3410;color:#fde68a;border-color:
 .ccnote{background:#f0f9ff;border-color:#bae6fd}.ccnote p{margin:6px 0;font-size:16px;line-height:1.55}
 html[data-theme="dark"] .cctbl thead th{background:#16263d}
 html[data-theme="dark"] .ccnote{background:#12304a;border-color:#1e4b6e}
+
+/* ---------- العملاء + اختيار العميل ---------- */
+button.msrow{width:100%;background:transparent;border:0;border-bottom:1px solid var(--line);text-align:start;color:inherit;font:inherit;cursor:pointer}
+.msrow.on{background:#e0f2fe;font-weight:700}
+.msrow.cs-add{color:#1d4ed8;font-weight:700}
+html[data-theme="dark"] .msrow.on{background:#12304a}
+html[data-theme="dark"] .msrow.cs-add{color:#93c5fd}
+.custbtn{background:transparent;border:0;border-bottom:1px dashed currentColor;color:inherit;font:inherit;text-align:inherit;width:100%;padding:2px 0;cursor:pointer;min-height:28px}
+.libitem .btn.d{color:#b42318}
