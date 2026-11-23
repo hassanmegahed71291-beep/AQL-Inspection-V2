@@ -357,3 +357,32 @@ html[data-theme="dark"] .msrow.cs-add{color:#93c5fd}
 .ccbrand .rlogotxt{font-size:11px;letter-spacing:5px;line-height:1.9}
 .ccbrand .rtitle{font-size:19px;font-weight:700;margin:10px 0 2px;text-align:left}
 .ccbrand .ccsub{font-size:12.5px;color:#475569;padding-bottom:8px;border-bottom:2px solid #1f4e79;text-align:left}
+
+/* MEYAR Industrial Light refresh — global app shell; inspection report is exempt */
+:root{--navy:#17365b;--navy2:#234b75;--cyan:#0b91c9;--cd:#176da8;--bg:#f4f7fb;--line:#d7e1ec;--ink:#172b45;--mute:#64748b}
+body{background:var(--bg);color:var(--ink)}
+.main:not(.inspection-report-route){padding-top:calc(68px + env(safe-area-inset-top))}
+.main:not(.inspection-report-route) .top{position:fixed;top:0;left:0;right:0;z-index:40;direction:rtl;display:flex;align-items:center;justify-content:flex-start;gap:clamp(5px,1.5vw,12px);min-height:68px;padding:calc(7px + env(safe-area-inset-top)) 10px 7px;background:rgba(255,255,255,.97);color:var(--ink);border-bottom:1px solid #dbe5f0;box-shadow:0 3px 14px #17365b12;backdrop-filter:blur(12px)}
+.main:not(.inspection-report-route) .top-brand{position:static;transform:none;margin-inline-start:auto;display:flex;align-items:center;gap:5px;color:var(--navy);font-size:clamp(17px,4vw,23px);font-weight:900;letter-spacing:.5px;white-space:nowrap;line-height:1}
+.main:not(.inspection-report-route) .top-brand img{width:clamp(38px,10vw,48px);height:clamp(38px,10vw,48px);object-fit:contain;margin:0}
+.main:not(.inspection-report-route) .top-action,.main:not(.inspection-report-route) .menu-toggle{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:34px;height:36px;min-width:34px;min-height:36px;padding:0;border:1px solid #e1e8f0;border-radius:10px;background:#f8fafc;color:#24486e;font-size:17px;cursor:pointer}
+.main:not(.inspection-report-route) .menu-toggle{display:inline-flex;color:#24486e;font-size:20px}
+.main:not(.inspection-report-route) .cloud-chip{flex:0 0 auto;width:35px;height:36px;min-height:36px;padding:0;display:inline-flex;align-items:center;justify-content:center;border:1px solid #dbe7f2;border-radius:10px;background:#f8fafc;color:#1683c7;font-size:0;overflow:hidden}
+.main:not(.inspection-report-route) .cloud-chip::before{content:'☁';font-size:20px;line-height:1}
+.main:not(.inspection-report-route) .cloud-chip.ok::after{content:'✓';font-size:9px;position:absolute;margin:15px 0 0 12px;background:#16a34a;color:white;border-radius:50%;width:12px;height:12px;line-height:12px;text-align:center}
+.main:not(.inspection-report-route) .autosave-status{display:none}
+.main:not(.inspection-report-route) #view{max-width:1200px;margin-inline:auto;padding:14px}
+.main:not(.inspection-report-route) .card{border-radius:14px;border-color:#e0e8f1;box-shadow:0 2px 9px rgba(24,55,88,.045)}
+.main:not(.inspection-report-route) .btn{border-radius:10px}
+.main:not(.inspection-report-route) .btn.p{background:#176da8;border-color:#176da8}
+.main:not(.inspection-report-route) .tabs{background:#fff;border-top:1px solid #dbe5ef;box-shadow:0 -4px 15px #183b5e0a}
+.main:not(.inspection-report-route) .tabs a{color:#62748a}
+.main:not(.inspection-report-route) .tabs a.on{color:#147fb7}
+.main:not(.inspection-report-route) .top-menu{position:fixed;top:calc(72px + env(safe-area-inset-top));background:#fff;color:var(--ink);border:1px solid #dbe5ef;box-shadow:0 12px 30px #183b5e20;z-index:45}
+.main:not(.inspection-report-route) .top-menu a{color:var(--ink);border-radius:9px}
+.main:not(.inspection-report-route) .top-menu a.on{background:#e9f4fb;color:#087eb9}
+.main:not(.inspection-report-route) .menu-theme{border-color:#e5edf5}
+.main:not(.inspection-report-route) .menu-theme .btn{color:var(--ink);background:#f7fafd}
+@media(max-width:420px){.main:not(.inspection-report-route) .top{gap:4px;padding-inline:7px}.main:not(.inspection-report-route) .top-brand{font-size:16px}.main:not(.inspection-report-route) .top-brand img{width:35px;height:35px}.main:not(.inspection-report-route) .top-action,.main:not(.inspection-report-route) .menu-toggle{width:30px;height:34px;min-width:30px}.main:not(.inspection-report-route) .cloud-chip{width:31px;height:34px;min-height:34px}}
+@media(min-width:900px){.main:not(.inspection-report-route){padding-top:0}.main:not(.inspection-report-route) .top{position:sticky;top:0;left:auto;right:auto;min-height:68px;padding:8px 18px}.main:not(.inspection-report-route) .top-menu{top:76px;inset-inline-start:260px;inset-inline-end:16px}}
+/* Report route intentionally retains its original shell and report styles. */
