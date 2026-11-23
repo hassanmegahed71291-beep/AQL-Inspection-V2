@@ -37,8 +37,12 @@ const stL=s=>({draft:L('Draft','مسودة'),in_progress:L('In progress','قيد
 const DB={db:null,
   open(){return new Promise((res,rej)=>{const r=indexedDB.open('aql-inspection',3);r.onupgradeneeded=()=>{['kv','library','plans','inspections','comparisons','cmpfiles','files','filedata'].forEach(s=>{if(!r.result.objectStoreNames.contains(s))r.result.createObjectStore(s,{keyPath:'id'})})};r.onsuccess=()=>{this.db=r.result;res()};r.onerror=()=>rej(r.error)})},
   tx(s,m,f){return new Promise((res,rej)=>{const t=this.db.transaction(s,m);let r;try{r=f(t.objectStore(s))}catch(e){return rej(e)}t.oncomplete=()=>res(r&&r.result);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error)})},
-  all(s){return this.tx(s,'readonly',st=>st.getAll())},get(s,id){return this.tx(s,'readonly',st=>st.get(id))},rev:0,own:0,noTomb:false,noKick:false,
-  put(s,o){DB.rev++;if(!DB.noKick&&(s==='inspections'||s==='library'||s==='plans'||(s==='kv'&&o&&(o.id==='settings'||o.id==='lists'||String(o.id).startsWith('inspset_')||String(o.id).startsWith('cust_')))))cloudKick();return this.tx(s,'readwrite',st=>st.put(o))},clear(s){return this.tx(s,'readwrite',st=>st.clear())},del(s,id){DB.rev++;if(!DB.noKick&&['library','plans','inspections'].includes(s))cloudKick();return this.tx(s,'readwrite',st=>st.delete(id)).then(async r=>{if(!DB.noTomb&&['library','plans','inspections'].includes(s)){try{const m=(await DB.get('kv','syncmeta'))||{id:'syncmeta',ws:'',h:{},s:{},tomb:{},aud:{}};m.tomb=m.tomb||{};m.tomb[s+'/'+id]=Date.now();await DB.put('kv',m)}catch(e){}}return r})}};
+  all(s){return this.tx(s,'readonly',st=>st.getAll())},get(s,id){return this.tx(s,'readonly',st=>st.get(id))},keys(s){return this.tx(s,'readonly',st=>st.getAllKeys())},rev:0,own:0,noTomb:false,noKick:false,noDirty:false,
+  dirty:(()=>{try{return new Map(Object.entries(JSON.parse(localStorage.getItem('aql-dirty-v1')||'{}')))}catch(e){return new Map()}})(),
+  markDirty(s,id){const k=s+'/'+id;this.dirty.set(k,(this.dirty.get(k)||0)+1);clearTimeout(this._dt);this._dt=setTimeout(()=>this.saveDirty(),300)},
+  saveDirty(){try{localStorage.setItem('aql-dirty-v1',JSON.stringify(Object.fromEntries(this.dirty)))}catch(e){}},
+
+  put(s,o){DB.rev++;if(!DB.noDirty&&o&&(s==='inspections'||s==='library'||s==='plans'||(s==='kv'&&(o.id==='settings'||o.id==='lists'||String(o.id).startsWith('inspset_')||String(o.id).startsWith('cust_')))))DB.markDirty(s,o.id);if(!DB.noKick&&(s==='inspections'||s==='library'||s==='plans'||(s==='kv'&&o&&(o.id==='settings'||o.id==='lists'||String(o.id).startsWith('inspset_')||String(o.id).startsWith('cust_')))))cloudKick();return this.tx(s,'readwrite',st=>st.put(o))},clear(s){return this.tx(s,'readwrite',st=>st.clear())},del(s,id){DB.rev++;if(!DB.noKick&&['library','plans','inspections'].includes(s))cloudKick();return this.tx(s,'readwrite',st=>st.delete(id)).then(async r=>{if(!DB.noTomb&&['library','plans','inspections'].includes(s)){try{const m=(await DB.get('kv','syncmeta'))||{id:'syncmeta',ws:'',h:{},s:{},tomb:{},aud:{}};m.tomb=m.tomb||{};m.tomb[s+'/'+id]=Date.now();await DB.put('kv',m)}catch(e){}}return r})}};
 const DEPTS=[['Cutting','القص'],['Front Preparation','تجهيز الأمام'],['Sleeve Preparation','تجهيز الأكمام'],['Lining Preparation','تجهيز البطانة'],['Assembly','التجميع'],['Pressing','الكي'],['Packing','التعبئة']];
 const defSettings=()=>({id:'settings',platformName:'MEYAR',factoryName:'ALPHA OMEGA EGYPT',inspectorName:'',jacket:DEPTS.map(([en,ar])=>({id:'d_'+uid(6),en,ar,active:true})),trousers:[],vest:[],shorts:[],minDefPages:2,minItemPages:0});
 async function loadAll(){S.lib=await DB.all('library');S.plans=await DB.all('plans');const allIns=(await DB.all('inspections')).sort((a,b)=>b.createdAt-a.createdAt),lim=Date.now()-30*864e5,keepIns=[];
@@ -865,28 +869,33 @@ function cloudPanel(){
    h('p',{class:'warn'},L('Run the latest AQL_Supabase_Setup.sql once in Supabase. Not synced by design: members and PINs (they stay on each device for security) and customer-comparison PDFs. When the same record changed on two devices, the newer edit wins (a device joining for the first time adopts the workspace settings).','شغّل أحدث ملف AQL_Supabase_Setup.sql مرة واحدة في Supabase. لا تتزامن عمداً: الأعضاء والأرقام السرية (تبقى على كل جهاز للأمان) وملفات PDF الخاصة بالمقارنات. عند تعديل نفس السجل على جهازين يفوز التعديل الأحدث (والجهاز الذي ينضم لأول مرة يتبنى إعدادات مساحة العمل).')));
 }
 
-async function aqlPhotoToCloud(v,c,ws,basePath,seq){
- if(typeof v==='string'&&/^data:image\//i.test(v)){
-   const blob=await (await fetch(v)).blob();
-   const ext=(blob.type.split('/')[1]||'jpeg').replace('jpeg','jpg').replace(/[^a-z0-9]/gi,'')||'jpg';
-   const path=basePath+'/photo-'+(seq.n++)+'.'+ext;
-   const up=await c.storage.from('aql-photos').upload(path,blob,{contentType:blob.type||'image/jpeg',upsert:true});
-   if(up.error)throw up.error;
-   return {__aqlCloudPhoto:path};
- }
- if(Array.isArray(v)){const a=[];for(const x of v)a.push(await aqlPhotoToCloud(x,c,ws,basePath,seq));return a}
- if(v&&typeof v==='object'){const o={};for(const [k,x] of Object.entries(v))o[k]=await aqlPhotoToCloud(x,c,ws,basePath,seq);return o}
- return v;
-}
-async function aqlPhotoFromCloud(v,c){
- if(v&&typeof v==='object'&&!Array.isArray(v)&&typeof v.__aqlCloudPhoto==='string'){
-   const d=await c.storage.from('aql-photos').download(v.__aqlCloudPhoto);if(d.error)throw d.error;
-   return await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=()=>reject(r.error||new Error('Could not read cloud photo'));r.readAsDataURL(d.data)});
- }
- if(Array.isArray(v)){const a=[];for(const x of v)a.push(await aqlPhotoFromCloud(x,c));return a}
- if(v&&typeof v==='object'){const o={};for(const [k,x] of Object.entries(v))o[k]=await aqlPhotoFromCloud(x,c);return o}
- return v;
-}
+/*SYNC-REGION-START*/
+/* ---- photos: content-addressed upload (only what the cloud doesn't have yet), parallel download that reuses local copies ---- */
+async function aqlPool(items,n,fn){let i=0;const w=async()=>{while(i<items.length){const k=i++;await fn(items[k],k)}};await Promise.all(Array.from({length:Math.min(n,items.length)},w))}
+async function aqlHash24(s){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return[...new Uint8Array(b)].slice(0,12).map(x=>x.toString(16).padStart(2,'0')).join('')}
+const aqlIsPhoto=v=>typeof v==='string'&&/^data:image\//i.test(v);
+function aqlPhotoExt(v){const m=/^data:image\/([a-z0-9.+-]+)/i.exec(v);return((m&&m[1])||'jpeg').toLowerCase().replace('jpeg','jpg').replace(/[^a-z0-9]/g,'')||'jpg'}
+async function aqlPhotoToCloud(root,c,ws,basePath,gc){
+ const found=[];const walk=v=>{if(aqlIsPhoto(v)){found.push(v);return{__ph:found.length-1}}if(Array.isArray(v))return v.map(walk);if(v&&typeof v==='object'){const o={};for(const k of Object.keys(v))o[k]=walk(v[k]);return o}return v};
+ const skel=walk(root);if(!found.length)return root;
+ const names=new Array(found.length);await aqlPool(found,4,async(v,i)=>{names[i]='h-'+await aqlHash24(v)+'.'+aqlPhotoExt(v)});
+ let have=new Set();try{const l=await c.storage.from('aql-photos').list(basePath,{limit:1000});if(l&&l.data)have=new Set(l.data.map(f=>f.name))}catch(e){}
+ const byName=new Map();names.forEach((n,i)=>{if(!byName.has(n))byName.set(n,found[i])});
+ await aqlPool([...byName.keys()].filter(n=>!have.has(n)),3,async n=>{const blob=await(await fetch(byName.get(n))).blob(),up=await c.storage.from('aql-photos').upload(basePath+'/'+n,blob,{contentType:blob.type||'image/jpeg',upsert:true});if(up.error)throw up.error});
+ if(gc)[...have].filter(n=>/^photo-\d+\./.test(n)).forEach(n=>gc.push(basePath+'/'+n));
+ const fix=v=>v&&typeof v==='object'?(Array.isArray(v)?v.map(fix):('__ph' in v?{__aqlCloudPhoto:basePath+'/'+names[v.__ph]}:Object.fromEntries(Object.entries(v).map(([k,x])=>[k,fix(x)])))):v;
+ return fix(skel)}
+async function aqlPhotoFromCloud(root,c,localObj){
+ const refs=[];const walk=v=>{if(v&&typeof v==='object'&&!Array.isArray(v)&&typeof v.__aqlCloudPhoto==='string'){refs.push(v.__aqlCloudPhoto);return{__ph:refs.length-1}}if(Array.isArray(v))return v.map(walk);if(v&&typeof v==='object'){const o={};for(const k of Object.keys(v))o[k]=walk(v[k]);return o}return v};
+ const skel=walk(root);if(!refs.length)return root;
+ const out=new Array(refs.length),reuse=new Map();
+ if(localObj&&refs.some(p=>/\/h-[0-9a-f]{24}\./.test(p))){const mine=[];const w2=v=>{if(aqlIsPhoto(v))mine.push(v);else if(Array.isArray(v))v.forEach(w2);else if(v&&typeof v==='object')Object.values(v).forEach(w2)};w2(localObj);
+  await aqlPool(mine,4,async v=>{reuse.set('h-'+await aqlHash24(v)+'.'+aqlPhotoExt(v),v)})}
+ const need=[];refs.forEach((p,i)=>{const n=p.slice(p.lastIndexOf('/')+1);if(reuse.has(n))out[i]=reuse.get(n);else need.push(i)});
+ const cache=new Map();
+ await aqlPool(need,4,async i=>{const p=refs[i];if(!cache.has(p))cache.set(p,(async()=>{const d=await c.storage.from('aql-photos').download(p);if(d.error)throw d.error;return await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(r.error||new Error('Could not read cloud photo'));r.readAsDataURL(d.data)})})());out[i]=await cache.get(p)});
+ const fix=v=>v&&typeof v==='object'?(Array.isArray(v)?v.map(fix):('__ph' in v?out[v.__ph]:Object.fromEntries(Object.entries(v).map(([k,x])=>[k,fix(x)])))):v;
+ return fix(skel)}
 /* ---- safe two-way sync engine: per-record change detection, conflict rules, tombstones ---- */
 const SYNC_NEW_META=ws=>({id:'syncmeta',ws,h:{},s:{},tomb:{},aud:{}});
 async function syncHash(o){const s=JSON.stringify(o);try{const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}catch(e){return fbHash(s,'sync')}}
@@ -900,24 +909,26 @@ async function cloudSyncCore(mode,opts){opts=opts||{};
  const ses=await c.auth.getSession();if(ses.error)throw ses.error;if(!ses.data.session)throw new Error(L('Sign in to your cloud account first.','سجل الدخول إلى حساب السحابة أولاً.'));
  const role=await cloudRole(c,ws),mgr=role!=='inspector',canW=k=>mgr||k.startsWith('inspections/')||k.startsWith('kv/inspset_')||k.startsWith('kv/cust_')||k.startsWith('library/');
  let meta=await DB.get('kv','syncmeta');if(!meta||meta.ws!==ws)meta=SYNC_NEW_META(ws);['h','s','tomb','aud'].forEach(f=>meta[f]=meta[f]||{});
- const st={up:0,down:0,del:0,delLocal:0,conf:0,skip:0,err:'',changed:false},T='aql_cloud_records',OC={onConflict:'workspace_id,record_type,record_id'};
- const fail=e=>{st.skip++;if(!st.err)st.err=(e&&e.message)||String(e)};
- const sput=(s,o)=>{DB.own++;DB.noKick=true;try{return DB.put(s,o)}finally{DB.noKick=false}};
- const rev0=DB.rev-DB.own,startT=Date.now();
- const quick=!!opts.fast&&CLOUD_SEEN.ws===ws&&CLOUD_SEEN.rev===rev0;
+ const st={up:0,down:0,del:0,delLocal:0,conf:0,skip:0,err:'',changed:false,pull:{ins:[],other:false}},T='aql_cloud_records',OC={onConflict:'workspace_id,record_type,record_id'};
+ const failed=new Set(),fail=(e,k)=>{st.skip++;if(k)failed.add(k);if(!st.err)st.err=(e&&e.message)||String(e)};
+ const sput=(s,o)=>{DB.own++;DB.noKick=true;DB.noDirty=true;try{return DB.put(s,o)}finally{DB.noKick=false;DB.noDirty=false}};
+ const rev0=DB.rev-DB.own,startT=Date.now(),dirtySnap=new Map(DB.dirty||[]);
+ /* fast (automatic) runs only look at records changed since the last sync; manual runs and a daily run verify everything */
+ const full=!opts.fast||!meta.fullAt||Date.now()-meta.fullAt>864e5;
  try{
-  /* 1. cloud index (metadata only) */
+  /* 1. cloud index (metadata only; the audit log is handled separately) */
   const idx=new Map();let from=0;
-  while(true){const r=await c.from(T).select('record_type,record_id,updated_at').eq('workspace_id',ws).order('record_type').order('record_id').range(from,from+499);if(r.error)throw r.error;for(const x of r.data)idx.set(x.record_type+'/'+x.record_id,Date.parse(x.updated_at));if(r.data.length<500)break;from+=500}
-  /* 2. local records */
+  while(true){const r=await c.from(T).select('record_type,record_id,updated_at').eq('workspace_id',ws).neq('record_type','audit').order('record_type').order('record_id').range(from,from+499);if(r.error)throw r.error;for(const x of r.data)idx.set(x.record_type+'/'+x.record_id,Date.parse(x.updated_at));if(r.data.length<500)break;from+=500}
+  /* 2. local records: only the keys here; bodies (with photos) are read on demand */
   const local=new Map();
-  for(const t of ['library','plans','inspections'])for(const it of await DB.all(t))local.set(t+'/'+it.id,{store:t,type:t,id:String(it.id),obj:it});
-  for(const it of await DB.all('kv'))if(it.id==='settings'||it.id==='lists'||String(it.id).startsWith('inspset_')||String(it.id).startsWith('cust_'))local.set('kv/'+it.id,{store:'kv',type:'kv',id:it.id,obj:it});
-  const hc=new Map(),H=async k=>{if(!hc.has(k))hc.set(k,await syncHash(local.get(k).obj));return hc.get(k)};
-  const lchg=async k=>(quick&&meta.h[k]!==undefined)?false:(await H(k))!==meta.h[k];
+  for(const t of ['library','plans','inspections'])for(const k of await DB.keys(t))local.set(t+'/'+k,{store:t,type:t,id:String(k),rid:k,obj:undefined});
+  for(const k of await DB.keys('kv')){const id=String(k);if(id==='settings'||id==='lists'||id.startsWith('inspset_')||id.startsWith('cust_'))local.set('kv/'+id,{store:'kv',type:'kv',id,rid:k,obj:undefined})}
+  const LO=async k=>{const e=local.get(k);if(e.obj===undefined)e.obj=await DB.get(e.store,e.rid);return e.obj};
+  const hc=new Map(),H=async k=>{if(!hc.has(k)){const e=local.get(k),o=await LO(k);hc.set(k,await syncHash(o));if(!e.keep)e.obj=undefined}return hc.get(k)};
+  const lchg=async k=>(!full&&meta.h[k]!==undefined&&!dirtySnap.has(k))?false:(await H(k))!==meta.h[k];
   /* 3. decide per record */
   const toPull=new Set(),toPush=new Set(),toDelCloud=[],toDelLocal=[],conflicts=[];
-  const keys=new Set([...local.keys(),...idx.keys()].filter(k=>!k.startsWith('audit/')));
+  const keys=new Set([...local.keys(),...idx.keys()]);
   for(const k of keys){
    const L0=local.get(k),cs=idx.get(k),bs=meta.s[k],tomb=meta.tomb[k],cw=canW(k);
    if(!L0){
@@ -938,7 +949,7 @@ async function cloudSyncCore(mode,opts){opts=opts||{};
   const need=[...toPull,...conflicts],fetched=need.length?await cloudFetchPayloads(c,ws,need):new Map();
   const ts=o=>Math.max(+o.updatedAt||0,+o.deletedAt||0);
   for(const k of conflicts){
-   const row=fetched.get(k),lo=local.get(k).obj,cw=canW(k);
+   const row=fetched.get(k),lo=await LO(k),cw=canW(k);
    if(!row||!row.payload||typeof row.payload!=='object'){if(mode!=='pull'&&cw)toPush.add(k);continue}
    const co=row.payload;
    if(ts(lo)>0&&ts(co)>0&&ts(lo)===ts(co)){meta.h[k]=await H(k);meta.s[k]=idx.get(k);continue}
@@ -947,27 +958,33 @@ async function cloudSyncCore(mode,opts){opts=opts||{};
    else if(ts(lo)>0&&ts(co)>0)w=ts(lo)>ts(co)?'local':'cloud';
    else w=(meta.s[k]===undefined||!cw)?'cloud':'local';
    if(w==='local'&&cw)toPush.add(k);else toPull.add(k)}
-  /* 5. pull */
+  /* 5. pull (photos already on this device are reused, the rest download in parallel) */
   for(const k of toPull){try{const row=fetched.get(k);if(!row||!row.payload||typeof row.payload!=='object')continue;const i=k.indexOf('/'),type=k.slice(0,i);
     if(type==='kv'&&!['settings','lists'].includes(row.payload.id)&&!String(row.payload.id).startsWith('inspset_')&&!String(row.payload.id).startsWith('cust_'))continue;
-    const x=await aqlPhotoFromCloud(row.payload,c);await sput(type,x);meta.h[k]=await syncHash(await DB.get(type,x.id));meta.s[k]=idx.get(k);st.down++;st.changed=true}catch(e){fail(e)}}
+    const lo=local.has(k)?await LO(k):null,x=await aqlPhotoFromCloud(row.payload,c,lo);if(local.has(k))local.get(k).obj=undefined;
+    await sput(type,x);meta.h[k]=await syncHash(await DB.get(type,x.id));meta.s[k]=idx.get(k);st.down++;st.changed=true;if(type==='inspections')st.pull.ins.push(x.id);else st.pull.other=true}catch(e){fail(e,k)}}
   /* 6. push */
-  let batch=[];const flush=async()=>{if(!batch.length)return;const r=await c.from(T).upsert(batch.map(b=>b.row),OC);if(r.error)throw r.error;batch.forEach(b=>{meta.h[b.k]=b.lh;meta.s[b.k]=b.stamp;st.up++});batch=[]};
-  for(const k of toPush){try{const lo=local.get(k),lh=await H(k),seq={n:0},safe=encodeURIComponent(lo.id).replace(/%/g,'_');
-    const payload=await aqlPhotoToCloud(lo.obj,c,ws,`${ws}/${lo.type}/${safe}`,seq),iso=new Date().toISOString();
-    batch.push({k,lh,stamp:Date.parse(iso),row:{workspace_id:ws,record_type:lo.type,record_id:lo.id,payload,updated_at:iso}});if(batch.length>=10)await flush()}catch(e){fail(e)}}
+  let batch=[];const flush=async()=>{if(!batch.length)return;const part=batch;batch=[];const r=await c.from(T).upsert(part.map(b=>b.row),OC);if(r.error){part.forEach(b=>failed.add(b.k));throw r.error}part.forEach(b=>{meta.h[b.k]=b.lh;meta.s[b.k]=b.stamp;st.up++});
+    const gcAll=part.flatMap(b=>b.gc);if(gcAll.length){try{await c.storage.from('aql-photos').remove(gcAll)}catch(e){}}};
+  for(const k of toPush){try{const e=local.get(k);e.keep=true;const lh=await H(k),obj=await LO(k),gc=[],safe=encodeURIComponent(e.id).replace(/%/g,'_');
+    const payload=await aqlPhotoToCloud(obj,c,ws,`${ws}/${e.type}/${safe}`,gc),iso=new Date().toISOString();e.obj=undefined;e.keep=false;
+    batch.push({k,lh,gc,stamp:Date.parse(iso),row:{workspace_id:ws,record_type:e.type,record_id:e.id,payload,updated_at:iso}});if(batch.length>=10)await flush()}catch(e2){fail(e2,k)}}
   try{await flush()}catch(e){fail(e);batch=[]}
   /* 7. deletions */
-  for(const k of toDelCloud){try{const i=k.indexOf('/'),type=k.slice(0,i),id=k.slice(i+1);const r=await c.from(T).delete().eq('workspace_id',ws).eq('record_type',type).eq('record_id',id);if(r.error)throw r.error;await cloudRemovePhotos(c,ws,type,id);delete meta.tomb[k];delete meta.h[k];delete meta.s[k];st.del++}catch(e){fail(e)}}
-  for(const k of toDelLocal){try{const L0=local.get(k);DB.noTomb=true;DB.own++;try{await DB.del(L0.store,L0.obj.id)}finally{DB.noTomb=false}delete meta.h[k];delete meta.s[k];st.delLocal++;st.changed=true}catch(e){fail(e)}}
-  /* 8. audit log: union, newest first, capped at 500 */
-  if(mode!=='pull'){const kv=await DB.all('kv'),mine=((kv.find(x=>x.id==='audit')||{items:[]}).items).map((x,i)=>({...x,id:String(x.id||x.at||i)})).filter(x=>!meta.aud[x.id]);
+  for(const k of toDelCloud){try{const i=k.indexOf('/'),type=k.slice(0,i),id=k.slice(i+1);const r=await c.from(T).delete().eq('workspace_id',ws).eq('record_type',type).eq('record_id',id);if(r.error)throw r.error;await cloudRemovePhotos(c,ws,type,id);delete meta.tomb[k];delete meta.h[k];delete meta.s[k];st.del++}catch(e){fail(e,k)}}
+  for(const k of toDelLocal){try{const L0=local.get(k);DB.noTomb=true;DB.own++;try{await DB.del(L0.store,L0.rid)}finally{DB.noTomb=false}delete meta.h[k];delete meta.s[k];st.delLocal++;st.changed=true;st.pull.other=true}catch(e){fail(e,k)}}
+  /* 8. audit log: push only what is new, pull only what is newer than the last pull (never the whole history) */
+  if(mode!=='pull'){const ak=await DB.get('kv','audit'),items=(ak&&ak.items)||[],mine=items.map((x,i)=>({...x,id:String(x.id||x.at||i)})).filter(x=>!meta.aud[x.id]);
     for(let i=0;i<mine.length;i+=20){const part=mine.slice(i,i+20);const r=await c.from(T).upsert(part.map(x=>({workspace_id:ws,record_type:'audit',record_id:x.id,payload:x,updated_at:new Date().toISOString()})),OC);if(r.error){fail(r.error);break}part.forEach(x=>meta.aud[x.id]=1)}}
-  if(mode!=='push'){const kv=await DB.all('kv'),old=(kv.find(x=>x.id==='audit')||{items:[]}).items,have=new Set(old.map(x=>String(x.id||x.at)));
-    const miss=[...idx.keys()].filter(k=>k.startsWith('audit/')&&!meta.aud[k.slice(6)]&&!have.has(k.slice(6)));
-    if(miss.length){const rows=await cloudFetchPayloads(c,ws,miss),add=[];for(const [k,r] of rows)if(r.payload&&r.payload.action){add.push(r.payload);meta.aud[k.slice(6)]=1}
-      if(add.length){const mp=new Map();[...old,...add].forEach((x,i)=>mp.set(String(x.id||x.at||i),x));await sput('kv',{id:'audit',items:[...mp.values()].sort((a,b)=>(b.at||0)-(a.at||0)).slice(0,500)});st.changed=true}}}
-  if(Object.keys(meta.aud).length>3000)meta.aud={};
+  if(mode!=='push'){let q=c.from(T).select('record_id,payload,updated_at').eq('workspace_id',ws).eq('record_type','audit');
+    if(meta.audT)q=q.gt('updated_at',new Date(Date.parse(meta.audT)-6e5).toISOString()).order('updated_at',{ascending:true}).limit(1000);else q=q.order('updated_at',{ascending:false}).limit(500);
+    const r=await q;if(r.error)fail(r.error);else if(r.data.length){const ak=await DB.get('kv','audit'),old=(ak&&ak.items)||[],have=new Set(old.map(x=>String(x.id||x.at))),add=r.data.map(x=>x.payload).filter(p=>p&&p.action&&!have.has(String(p.id||p.at)));
+     meta.audT=r.data.reduce((m,x)=>x.updated_at>m?x.updated_at:m,meta.audT||'');r.data.forEach(x=>meta.aud[x.record_id]=1);
+     if(add.length){const mp=new Map();[...old,...add].forEach((x,i)=>mp.set(String(x.id||x.at||i),x));await sput('kv',{id:'audit',items:[...mp.values()].sort((a,b)=>(b.at||0)-(a.at||0)).slice(0,500)})}}}
+  {const ks=Object.keys(meta.aud);if(ks.length>6000)ks.slice(0,ks.length-4000).forEach(k=>delete meta.aud[k])}
+  /* local changes that were handled are no longer "dirty" (a failed record stays dirty and is retried) */
+  if(mode!=='pull'){for(const [k,v] of dirtySnap)if(!failed.has(k)&&DB.dirty.get(k)===v)DB.dirty.delete(k);if(DB.saveDirty)DB.saveDirty()}
+  if(full&&!st.err)meta.fullAt=Date.now();
  }finally{
   try{const cur=await DB.get('kv','syncmeta');if(cur&&cur.ws===ws&&cur.tomb)for(const k in cur.tomb)if(!(k in meta.tomb)&&cur.tomb[k]>=startT)meta.tomb[k]=cur.tomb[k];await sput('kv',meta)}catch(e){}
  }
@@ -975,6 +992,7 @@ async function cloudSyncCore(mode,opts){opts=opts||{};
  localStorage.setItem(CLOUD_LASTSYNC_KEY,String(Date.now()));
  return st;
 }
+
 /* automatic background sync (safe: only changed records, never blocks the form being edited) */
 let CLOUD_AUTO_T=0;
 async function cloudAuto(force){
@@ -987,9 +1005,10 @@ async function cloudAuto(force){
   CLOUD_AUTO_T=Date.now();CLOUD_BUSY=true;
   const st=await cloudSync('both',{fast:true});
   CLOUD_LAST=(st.err?'Auto sync finished with errors: '+st.err:'');
-  if(st.changed){await loadAll();notifyNewReports();if(!dirty&&!(ROUTE.startsWith('#/new')||ROUTE.startsWith('#/i/')))render()}
+  if(st.changed){if(st.pull&&!st.pull.other&&st.pull.ins.length&&!st.delLocal)await patchIns(st.pull.ins);else await loadAll();notifyNewReports();if(!dirty&&!(ROUTE.startsWith('#/new')||ROUTE.startsWith('#/i/')))render()}
  }catch(e){CLOUD_LAST='Auto sync failed: '+((e&&e.message)||e)}finally{CLOUD_BUSY=false}
 }
+async function patchIns(ids){for(const id of ids){const x=await DB.get('inspections',id);S.ins=S.ins.filter(y=>y.id!==id);S.trash=S.trash.filter(y=>y.id!==id);if(x){migratePhotos(x);(x.deletedAt?S.trash:S.ins).push(x)}}S.ins.sort((a,b)=>b.createdAt-a.createdAt);S.trash.sort((a,b)=>b.createdAt-a.createdAt)}
 window.addEventListener('online',()=>cloudAuto(true));
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)cloudAuto()});
 setTimeout(()=>cloudAuto(true),5000);
@@ -1045,6 +1064,7 @@ function cloudRealtime(){
   CLOUD_RT=c.channel('aql-'+ws).on('postgres_changes',{event:'*',schema:'public',table:'aql_cloud_records',filter:'workspace_id=eq.'+ws},p=>{
     try{const n=p.new||{};
      if(FILES_HOOK&&n.record_type==='files')FILES_HOOK();
+     if(n.record_type==='audit')return;
     }catch(e){}
     clearTimeout(RT_T);RT_T=setTimeout(()=>cloudAuto(true),1200)}).subscribe();
  }catch(e){}}
@@ -1474,7 +1494,7 @@ function vCmpCust(){
  if(!CMPC.init){const ms=msOptsOf(all(),'mon');CMPC.mn=ms.length?[ms[0][0]]:[];CMPC.init=true}
  const out=h('div',{class:'stack'}),COL=['#2563eb','#f59e0b','#16a34a','#dc2626','#7c3aed','#0891b2'],fmtN=n=>Math.round(n).toLocaleString();
  const draw=()=>{const d=cmpCustCalc(CMPC.cu,CMPC.mn),list=d.list,mo=msOptsOf(all(),'mon'),mname=CMPC.mn.length===1?((mo.find(x=>x[0]===CMPC.mn[0])||[])[1]||CMPC.mn[0]):'',period=CMPC.mn.length===1?L('in '+mname,'في '+mname):CMPC.mn.length?L('in the selected months','في الشهور المحددة'):L('overall','إجمالاً');
-  const brand=sub=>h('div',{class:'card ccbrand'},h('div',{class:'rlh',dir:'ltr'},h('img',{class:'rlogo',src:S.settings.logo||DEF_LOGO}),h('div',{class:'rlogotxt'},String(S.settings.factoryName||'').toUpperCase().split(/\s+/).filter(Boolean).map(w=>h('div',{},w)))),h('div',{class:'rtitle',style:'margin:10px 0 2px;font-size:18px'},L('CUSTOMER COMPARISON','مقارنة العملاء')),h('div',{style:'font-size:13px;color:#475569'},(S.settings.factoryName?S.settings.factoryName+' · ':'')+sub));
+  const brand=sub=>h('div',{class:'ccbrand',dir:'ltr'},h('div',{class:'rlh'},h('img',{class:'rlogo',src:S.settings.logo||DEF_LOGO}),h('div',{class:'rlogotxt'},String(S.settings.factoryName||'').toUpperCase().split(/\s+/).filter(Boolean).map(w=>h('div',{},w)))),h('div',{class:'rtitle',dir:'auto'},L('CUSTOMER COMPARISON','مقارنة العملاء')),h('div',{class:'ccsub',dir:'auto'},(S.settings.factoryName?S.settings.factoryName+' · ':'')+sub));
   if(!list.length){out.replaceChildren(h('div',{class:'card empty'},h('h2',{},L('No completed inspections for the selected period.','لا توجد فحوصات مكتملة في الفترة المحددة.')),h('p',{class:'hint'},L('Only approved/rejected inspections are compared.','تُقارَن الفحوصات المعتمدة والمرفوضة فقط.'))));return}
   const mx=Math.max(...list.map(o=>o.rate||0),0.0001),best=list.find(o=>o.rate!=null),worst=[...list].reverse().find(o=>o.rate!=null),ind=o=>list.length<2||o.rate==null?'':o===best?'🟢 ':o===worst&&worst!==best?'🔴 ':'🟡 ';
   const bars=h('div',{class:'ccbars'},list.map((o,k)=>h('div',{class:'ccbar'},h('div',{class:'ccplot'},h('b',{},o.rate==null?'—':o.rate.toFixed(1)+'%'),h('div',{class:'ccfill',style:'height:'+(o.rate==null?3:Math.max(3,o.rate/mx*86))+'%;background:'+COL[k%COL.length]})),h('span',{},o.name))));

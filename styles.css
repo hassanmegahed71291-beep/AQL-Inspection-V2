@@ -349,3 +349,11 @@ html[data-theme="dark"] .msrow.on{background:#12304a}
 html[data-theme="dark"] .msrow.cs-add{color:#93c5fd}
 .custbtn{background:transparent;border:0;border-bottom:1px dashed currentColor;color:inherit;font:inherit;text-align:inherit;width:100%;padding:2px 0;cursor:pointer;min-height:28px}
 .libitem .btn.d{color:#b42318}
+
+/* ---------- هيدر مقارنة العملاء: زي هيدر تقرير الفحص (لوجو + اسم الشركة، وتحتهم العنوان) ---------- */
+.ccbrand{background:#fff;color:#000;font-family:'CalibriX',Calibri,Arial,sans-serif;padding:14px 16px 12px;border:1px solid var(--line);border-radius:14px;text-align:left}
+.ccbrand .rlh{gap:10px}
+.ccbrand .rlogo{height:60px;max-width:190px}
+.ccbrand .rlogotxt{font-size:11px;letter-spacing:5px;line-height:1.9}
+.ccbrand .rtitle{font-size:19px;font-weight:700;margin:10px 0 2px;text-align:left}
+.ccbrand .ccsub{font-size:12.5px;color:#475569;padding-bottom:8px;border-bottom:2px solid #1f4e79;text-align:left}
