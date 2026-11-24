@@ -84,9 +84,32 @@ const activePlan=()=>{const p=S.plans.find(x=>x.active&&x.current);if(!p)return 
 let D=null,dirty=false,errs=[],okMsg='',busy=false,DN='',LE=null,PE=null;
 const NAV=[['#/','📊','Manager Panel','لوحة المدير'],['#/new','➕','New Inspection','فحص جديد'],['#/archive','🗂','Inspection Archive','أرشيف الفحوصات'],['#/charts','🥧','Pie Charts','الرسوم الدائرية'],['#/monthly','📅','Monthly Quality Report','تقرير الجودة الشهري'],['#/compare','⚖️','Customer vs Factory Report','مقارنة تقرير العميل بالمصنع'],['#/cmpcust','📈','Customer Comparison','مقارنة العملاء'],['#/library','📚','Defect Library','مكتبة العيوب'],['#/customers','🏢','Customers','العملاء'],['#/reports','📄','Reports','التقارير'],['#/aql','🛠','AQL Plans','خطط AQL'],['#/cloud','☁️','My Cloud','سحابتي'],['#/inspset','🛠','Inspection Settings','إعدادات الفحص'],['#/settings','⚙️','General Settings','الإعدادات العامة']];
 let ROUTE=(location.hash&&location.hash.startsWith('#/'))?location.hash:'#/';
+let SCROLL_TO_TOP=false;
+const ROUTE_SCROLL=new Map();
+function captureScrollState(){
+  const items=[];document.querySelectorAll('#view *').forEach((el)=>{
+    const st=getComputedStyle(el),scrollable=(el.scrollHeight>el.clientHeight+2)&&(/auto|scroll/.test(st.overflowY)||el.classList.contains('liblist'));
+    if(scrollable){const cls=[...el.classList].sort().join('.');const same=[...document.querySelectorAll('#view *')].filter(x=>[...x.classList].sort().join('.')===cls);items.push({cls,index:same.indexOf(el),top:el.scrollTop,left:el.scrollLeft})}
+  });
+  return{windowY:window.scrollY,windowX:window.scrollX,items};
+}
+function restoreScrollState(snap){if(!snap)return;requestAnimationFrame(()=>{
+  window.scrollTo(snap.windowX||0,snap.windowY||0);
+  (snap.items||[]).forEach(it=>{const els=[...document.querySelectorAll('#view *')].filter(x=>[...x.classList].sort().join('.')===it.cls);const el=els[it.index];if(el){el.scrollTop=it.top;el.scrollLeft=it.left}});
+});}
 function go(x){if(x===ROUTE)return;
   if(dirty&&!confirm(L('You have unsaved changes. Leave without saving?','لديك تغييرات غير محفوظة. المغادرة دون حفظ؟')))return;
-  dirty=false;ROUTE=x;try{history.replaceState(null,'',x)}catch(e){}route();scrollTo(0,0)}
+  ROUTE_SCROLL.set(ROUTE,captureScrollState());dirty=false;ROUTE=x;SCROLL_TO_TOP=true;
+  try{history.pushState({meyar:true,route:x,from:ROUTE},'',x)}catch(e){}
+  route();
+}
+function syncRouteFromHistory(){const x=(location.hash&&location.hash.startsWith('#/'))?location.hash:'#/';if(x===ROUTE)return;
+  if(dirty&&!confirm(L('You have unsaved changes. Leave without saving?','لديك تغييرات غير محفوظة. المغادرة دون حفظ؟'))){try{history.pushState({meyar:true,route:ROUTE},'',ROUTE)}catch(e){}return}
+  dirty=false;ROUTE=x;route();restoreScrollState(ROUTE_SCROLL.get(x));
+}
+try{history.replaceState({meyar:true,route:ROUTE,from:null},'',ROUTE)}catch(e){}
+window.addEventListener('popstate',syncRouteFromHistory);
+window.addEventListener('hashchange',syncRouteFromHistory);
 document.addEventListener('click',e=>{const a=e.target.closest&&e.target.closest('a[href^="#/"]');if(a){e.preventDefault();go(a.getAttribute('href'))}});
 function newIns(){return{id:insId(),createdAt:Date.now(),status:'draft',orderNo:'',customer:'',model:'',color:'',garmentType:'jacket',orderQty:'',lotSize:'',sampleSize:'',date:nowLocal(),notes:'',comment:'',poCustomer:'',item:'',style:'',salesOrder:'',actualQty:'',packingPct:'',startCode:'',endCode:'',rows:[],props:{},secs:{},defs:[],itemPhotos:[],defPhotos:[],measOn:false,meas:{},measSamples:'',measSizes:'',createdBy:S.me?S.me.id:'',inspectorName:S.me?S.me.name:'',result:null,decisionNote:'',aql:null,history:[]}}
 const MGRNAV=['#/','#/aql','#/settings','#/monthly','#/compare','#/cmpcust'],isMgr=()=>!!(S.me&&S.me.role==='manager'),mine=i=>!!S.me&&(i.createdBy===S.me.id||i.inspectorName===S.me.name);
@@ -139,7 +162,7 @@ const photoStrip=(photos,onDel,ro,onAdd)=>h('div',{},h('div',{class:'thumbs'},ph
 function render(){document.documentElement.lang=S.lang;document.documentElement.dir=S.lang==='ar'?'rtl':'ltr';
   if(!S.members.length){$('#app').replaceChildren(vSetup());return}if(!S.me){$('#app').replaceChildren(vLogin());return}
   const navs=NAV.filter(n=>isMgr()||!MGRNAV.includes(n[0])),outBtn=h('button',{class:'btn ghost s',onClick:signOut},'⎋ '+L('Sign out','خروج'));
-  const y=scrollY,hash=ROUTE,a='#/'+(hash.split('/')[1]||'');
+  const scrollSnapshot=LIB_EDIT_SCROLL||captureScrollState(),hash=ROUTE,a='#/'+(hash.split('/')[1]||'');
   const curNav=NAV.find(n=>n[0]===(a==='#/i'?'#/archive':a==='#/report'?'#/reports':a))||NAV[0];
   const sw=h('button',{class:'btn ghost s',onClick:()=>{S.lang=S.lang==='en'?'ar':'en';LS.set('lang',S.lang);render()}},S.lang==='en'?'العربية':'English');
   const link=n=>h('a',{href:n[0],class:n===curNav?'on':''},h('span',{},n[1]),' ',L(n[2],n[3]));
@@ -147,8 +170,8 @@ function render(){document.documentElement.lang=S.lang;document.documentElement.
   const v=({'':vPanel,new:vIns,i:vIns,archive:()=>vList(false),reports:()=>vList(true),charts:vCharts,monthly:vMonthly,compare:vCompare,cmpcust:vCmpCust,library:vLib,customers:vCustomers,aql:vAql,settings:vSettings,inspset:vInspSet,report:vReport,cloud:vCloud})[hash.split('/')[1]||'']||vDash;
   $('#app').replaceChildren(h('div',{class:'shell'},
     h('aside',{class:'side'},h('div',{class:'brand'},h('div',{class:'brand-wordmark',dir:'ltr'},h('img',{src:'./icons/meyar-192.png',alt:'M'}),h('b',{},'EYAR')),h('small',{},fac)),navs.map(link),h('div',{style:'margin-top:auto;display:grid;gap:8px'},themeButton(),h('small',{style:'color:#8fa6bb;padding:0 8px'},S.me.name+' · '+(isMgr()?L('Manager','مدير'):L('Inspector','مفتش'))),sw,outBtn)),
-    h('div',{class:'main'+(hash.split('/')[1]==='report'?' inspection-report-route':'')},h('header',{class:'top'},h('button',{class:'menu-toggle',type:'button','aria-label':'Open navigation',title:L('Menu','القائمة'),onClick:()=>{const m=$('#top-menu');if(m)m.classList.toggle('open')}},'☰'),cloudChipEl(),h('button',{class:'top-action lang-action',type:'button',title:L('Change language','تغيير اللغة'),onClick:()=>{S.lang=S.lang==='en'?'ar':'en';LS.set('lang',S.lang);render()}},'🌐'),h('button',{class:'top-action logout-action',type:'button',title:L('Sign out','تسجيل الخروج'),onClick:signOut},'↪'),h('div',{class:'top-brand',dir:'ltr'},h('img',{src:'./icons/meyar-192.png',alt:'MEYAR'}),h('span',{},'MEYAR')),h('span',{id:'autosave-status',class:'autosave-status'},dirty?L('Unsaved changes','تغييرات غير محفوظة'):L('Saved','تم الحفظ'))),h('nav',{id:'top-menu',class:'top-menu'},[...navs.map(link),h('div',{class:'menu-theme'},themeButton())]),h('main',{id:'view'},pagePdfBar(),v()))));
-  scrollTo(0,y)}
+    h('div',{class:'main'+(hash.split('/')[1]==='report'?' inspection-report-route':'')},h('header',{class:'top'},(ROUTE!=='#/'&&!ROUTE.startsWith('#/report/')?h('button',{class:'top-action page-back',type:'button','aria-label':L('Back','رجوع'),title:L('Back','رجوع'),onClick:()=>{if(history.state&&history.state.from)history.back();else go('#/')}},'←'):null),h('button',{class:'menu-toggle',type:'button','aria-label':'Open navigation',title:L('Menu','القائمة'),onClick:()=>{const m=$('#top-menu');if(m)m.classList.toggle('open')}},'☰'),cloudChipEl(),h('button',{class:'top-action lang-action',type:'button',title:L('Change language','تغيير اللغة'),onClick:()=>{S.lang=S.lang==='en'?'ar':'en';LS.set('lang',S.lang);render()}},'🌐'),h('button',{class:'top-action logout-action',type:'button',title:L('Sign out','تسجيل الخروج'),onClick:signOut},'↪'),h('div',{class:'top-brand',dir:'ltr'},h('img',{src:'./icons/meyar-192.png',alt:'MEYAR'}),h('span',{},'MEYAR')),h('span',{id:'autosave-status',class:'autosave-status'},dirty?L('Unsaved changes','تغييرات غير محفوظة'):L('Saved','تم الحفظ'))),h('nav',{id:'top-menu',class:'top-menu'},[...navs.map(link),h('div',{class:'menu-theme'},themeButton())]),h('main',{id:'view'},pagePdfBar(),v()))));
+  if(SCROLL_TO_TOP){SCROLL_TO_TOP=false;requestAnimationFrame(()=>scrollTo(0,0))}else restoreScrollState(scrollSnapshot);if(!LE)LIB_EDIT_SCROLL=null}
 /* ---------- dashboard ---------- */
 function vDash(){const done=S.ins.filter(i=>['approved','rejected'].includes(i.status));const c=s=>S.ins.filter(i=>s.includes(i.status)).length;const defs=done.flatMap(i=>i.defs||[]);const sum=k=>defs.reduce((a,d)=>a+num(d[k]),0);
   const M=[[L('Completed inspections','الفحوصات المكتملة'),done.length],[L('Accepted orders','الطلبيات المقبولة'),c(['approved'])],[L('Rejected orders','الطلبيات المرفوضة'),c(['rejected'])],[L('Awaiting review','بانتظار المراجعة'),c(['pending_review'])],[L('In progress','قيد التنفيذ'),c(['draft','in_progress'])],[L('Defect occurrences','مرات حدوث العيوب'),sum('occurrences')],[L('Affected pieces','القطع المتأثرة'),sum('pieces')]];
@@ -644,7 +667,7 @@ async function libAddToReport(l){
  const x=structuredClone(D);x.defs.forEach(d=>{delete d._open});if(x.status==='draft')x.status='in_progress';x.updatedAt=Date.now();
  await DB.put('inspections',x);D.status=x.status;D.updatedAt=x.updatedAt;dirty=false;await loadAll();
  return{ok:true,text:'✔ '+L('Added "'+nm+'" to the report ('+gName(g)+')'+(n>1?' — count '+n:''),'تمت إضافة «'+nm+'» للتقرير ('+gName(g)+')'+(n>1?' — العدد '+n:''))}}
-let LIB_F={g:'',q:''};
+let LIB_F={g:'',q:''},LIB_EDIT_SCROLL=null;
 function vLib(){
   if(LE){const e=LE.d;const tg=g=>{e.garments=e.garments.includes(g)?e.garments.filter(x=>x!==g):[...e.garments,g]};
     return h('div',{class:'card form'},h('h3',{},e.id?(S.lang==='ar'?e.nameAr:e.nameEn)||e.code:L('New defect','عيب جديد')),
@@ -666,11 +689,11 @@ function vLib(){
     box.replaceChildren(...(r.length?r.map(d=>h('div',{class:'libitem sev-'+d.severity+(d.active?'':' off')},
       h('div',{class:'libname'},h('b',{},nm(d)),(!LIB_F.g||!d.active||(d.photos&&d.photos.length))?h('span',{class:'hint'},[!LIB_F.g?(d.garments||[]).map(gName).join(' · '):'',d.active?'':L('inactive','غير مفعّل'),(d.photos&&d.photos.length)?'📷 '+d.photos.length:''].filter(Boolean).join(' · ')):null),
       h('span',{class:'sevchip '+d.severity},L(...sevL[d.severity])),
-      h('button',{type:'button',class:'btn s libedit','aria-label':L('Edit','تعديل'),onClick:()=>{LE={d:structuredClone(d)};render()}},'✏️'),
+      h('button',{type:'button',class:'btn s libedit','aria-label':L('Edit','تعديل'),onClick:()=>{LIB_EDIT_SCROLL=captureScrollState();LE={d:structuredClone(d)};render()}},'✏️'),
       h('button',{type:'button',class:'btn s p libadd'+(libActive()?'':' dim'),onClick:async e=>{const b=e.currentTarget;b.disabled=true;try{const r=await libAddToReport(d);note.textContent=r.text;note.className='libnote '+(r.ok?'ok':'warn');fill()}catch(x){note.textContent=L('Error: ','خطأ: ')+((x&&x.message)||x);note.className='libnote warn'}finally{b.disabled=false}}},libActive()&&rc(d.id)?'×'+rc(d.id)+' ＋':'＋ '+L('Add','إضافة')))):[h('div',{class:'card empty'},h('h2',{},L('No defects found','لا توجد عيوب')),h('p',{class:'hint'},L('Try another search or add a new defect.','جرّب بحثاً آخر أو أضف عيباً جديداً.')))]))};
   fill();
   return h('div',{},h('div',{class:'libbar'},h('div',{class:'libsearch'},h('span',{},'🔍'),h('input',{value:LIB_F.q,placeholder:L('Search for a defect…','ابحث عن عيب…'),onInput:e=>{LIB_F.q=e.target.value;fill()}})),
-    h('button',{class:'btn p',onClick:()=>{LE={d:{...blankDef(),garments:LIB_F.g?[LIB_F.g]:[...SINGLE]}};render()}},'＋ '+L('Add defect','إضافة عيب'))),
+    h('button',{class:'btn p',onClick:()=>{LIB_EDIT_SCROLL=captureScrollState();LE={d:{...blankDef(),garments:LIB_F.g?[LIB_F.g]:[...SINGLE]}};render()}},'＋ '+L('Add defect','إضافة عيب'))),
     libActive()?h('div',{class:'libreport'},h('span',{},'📝 '+L('Adding to report: ','الإضافة إلى التقرير: ')+' '),h('b',{style:'flex:1'},(D.orderNo||L('New report','تقرير جديد'))+(D.customer?' · '+D.customer:'')),h('button',{type:'button',class:'btn s',onClick:async()=>{if(!S.ins.some(i=>i.id===D.id)){const x=structuredClone(D);x.defs.forEach(d=>{delete d._open});x.updatedAt=Date.now();await DB.put('inspections',x);dirty=false;await loadAll()}go('#/i/'+D.id)}},'↩ '+L('Back to report','العودة للتقرير'))):h('div',{class:'libreport off'},'ℹ️ '+L('Open an inspection draft to add defects to it from here.','افتح مسودة فحص لتضيف العيوب إليها من هنا.')),
     note,chips,cnt,box)}
 async function saveDef(){const e=LE.d;
