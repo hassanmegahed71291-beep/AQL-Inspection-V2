@@ -386,3 +386,84 @@ body{background:var(--bg);color:var(--ink)}
 @media(max-width:420px){.main:not(.inspection-report-route) .top{gap:4px;padding-inline:7px}.main:not(.inspection-report-route) .top-brand{font-size:16px}.main:not(.inspection-report-route) .top-brand img{width:35px;height:35px}.main:not(.inspection-report-route) .top-action,.main:not(.inspection-report-route) .menu-toggle{width:30px;height:34px;min-width:30px}.main:not(.inspection-report-route) .cloud-chip{width:31px;height:34px;min-height:34px}}
 @media(min-width:900px){.main:not(.inspection-report-route){padding-top:0}.main:not(.inspection-report-route) .top{position:sticky;top:0;left:auto;right:auto;min-height:68px;padding:8px 18px}.main:not(.inspection-report-route) .top-menu{top:76px;inset-inline-start:260px;inset-inline-end:16px}}
 /* Report route intentionally retains its original shell and report styles. */
+
+/* MEYAR refined navy header — all application pages except the inspection report */
+.main:not(.inspection-report-route){background:linear-gradient(145deg,#f9fbfe 0%,#f1f5fa 55%,#f7f9fc 100%)}
+.main:not(.inspection-report-route) .top{
+  background:linear-gradient(105deg,#0b1b31 0%,#102b4b 58%,#173a60 100%);
+  color:#f8fbff;border:0;border-bottom:1px solid #294969;
+  box-shadow:0 5px 18px rgba(8,25,47,.22);backdrop-filter:none;
+  min-height:76px;gap:clamp(5px,1.2vw,11px);padding:calc(9px + env(safe-area-inset-top)) 12px 9px;
+}
+.main:not(.inspection-report-route) .top-brand{
+  margin-inline-start:auto;margin-inline-end:0;color:#fff;gap:7px;
+  font-size:clamp(18px,4.4vw,23px);font-weight:900;letter-spacing:.8px;
+}
+.main:not(.inspection-report-route) .top-brand img{width:54px;height:54px;max-width:54px;max-height:54px;object-fit:contain;margin:0;filter:drop-shadow(0 2px 5px #0005)}
+.main:not(.inspection-report-route) .top-action,
+.main:not(.inspection-report-route) .menu-toggle{
+  width:38px;height:40px;min-width:38px;min-height:40px;border:1px solid #426080;
+  border-radius:11px;background:rgba(255,255,255,.09);color:#f4f8ff;font-size:18px;
+}
+.main:not(.inspection-report-route) .menu-toggle{color:#fff;font-size:21px}
+.main:not(.inspection-report-route) .cloud-chip{
+  position:relative;width:38px;height:40px;min-height:40px;border:1px solid #426080;
+  border-radius:11px;background:rgba(255,255,255,.09);color:#e9f5ff;
+}
+.main:not(.inspection-report-route) .cloud-chip::before{color:#e9f5ff;font-size:21px}
+.main:not(.inspection-report-route) .cloud-chip.ok::after{margin:15px 0 0 13px}
+.main:not(.inspection-report-route) .top-menu{top:calc(80px + env(safe-area-inset-top))}
+.main:not(.inspection-report-route){padding-top:calc(76px + env(safe-area-inset-top))}
+.main:not(.inspection-report-route) #view{padding:16px;}
+@media(max-width:420px){
+ .main:not(.inspection-report-route) .top{min-height:70px;padding-inline:7px;gap:5px}
+ .main:not(.inspection-report-route){padding-top:calc(70px + env(safe-area-inset-top))}
+ .main:not(.inspection-report-route) .top-brand{font-size:17px;gap:4px}
+ .main:not(.inspection-report-route) .top-brand img{width:46px;height:46px;max-width:46px;max-height:46px}
+ .main:not(.inspection-report-route) .top-action,.main:not(.inspection-report-route) .menu-toggle,.main:not(.inspection-report-route) .cloud-chip{width:33px;height:36px;min-width:33px;min-height:36px;border-radius:9px}
+ .main:not(.inspection-report-route) .cloud-chip::before{font-size:19px}
+ .main:not(.inspection-report-route) #view{padding:12px}
+}
+@media(min-width:900px){.main:not(.inspection-report-route){padding-top:0}.main:not(.inspection-report-route) .top{position:sticky;top:0;min-height:76px;padding:9px 20px}.main:not(.inspection-report-route) .top-menu{top:84px}}
+
+/* Customer comparison: mobile-first compact layout */
+.cccust-output{gap:12px;min-width:0}
+.cc-filters{gap:8px;padding:12px}
+.cc-filters h3{font-size:17px;margin:0}
+.cc-period{font-size:13px;color:#64748b;padding:0 3px}
+.cc-chart-card{padding:14px}
+.ccbars{display:grid;gap:12px;padding:8px 0 0}
+.ccbar{display:grid;gap:5px;min-width:0}
+.ccbar-head{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px}
+.ccbar-head b{min-width:0;overflow-wrap:anywhere}
+.ccbar-head strong{white-space:nowrap;color:#17365b}
+.cc-track{height:10px;border-radius:99px;background:#e7edf4;overflow:hidden}
+.cc-track i{display:block;height:100%;border-radius:99px;min-width:3px}
+.cc-customer-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.cc-customer-card{min-width:0;background:#fff;border:1px solid #dce5ef;border-radius:14px;padding:12px;box-shadow:0 3px 12px rgba(24,55,88,.055)}
+.cc-customer-title{display:flex;align-items:flex-start;justify-content:space-between;gap:7px;padding-bottom:9px;border-bottom:1px solid #e8eef5;margin-bottom:9px}
+.cc-customer-title b{font-size:15px;overflow-wrap:anywhere}
+.cc-customer-title strong{font-size:17px;white-space:nowrap}
+.cc-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.cc-mini-metric{background:#f4f7fb;border-radius:8px;padding:7px;min-width:0}
+.cc-mini-metric span{display:block;color:#64748b;font-size:11px;line-height:1.35}
+.cc-mini-metric b{display:block;color:#17365b;font-size:16px;margin-top:2px;overflow-wrap:anywhere}
+.cc-top-defects{margin-top:9px;padding-top:8px;border-top:1px solid #e8eef5;font-size:12px;display:grid;gap:4px}
+.cc-top-defects>b{color:#17365b;margin-bottom:2px}
+.cc-top-defects div{overflow-wrap:anywhere;color:#475569}
+.cc-export-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cc-export-actions .btn{justify-content:center;min-width:0;padding-inline:8px;font-size:13px;white-space:normal}
+.cc-export-actions .cc-wa{background:#16834a;border-color:#16834a;color:#fff}
+.ccnote{background:#f0f7fc;border-color:#d4e5f2}
+@media(max-width:430px){
+ .cc-customer-grid{grid-template-columns:minmax(0,1fr)}
+ .cc-customer-card{padding:11px}
+ .cc-mini-metric{padding:6px}
+ .cc-export-actions .btn{font-size:12px;min-height:42px}
+}
+@media(min-width:700px){.cc-customer-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+html[data-theme="dark"] .main:not(.inspection-report-route) .top{background:linear-gradient(105deg,#081321,#10243f 60%,#173a60)}
+html[data-theme="dark"] .cc-customer-card{background:#121e30;border-color:#27364a}
+html[data-theme="dark"] .cc-mini-metric{background:#0e1929}
+html[data-theme="dark"] .cc-mini-metric b,html[data-theme="dark"] .cc-customer-title strong{color:#d9eaff}
+html[data-theme="dark"] .cc-top-defects div{color:#c1cfdf}
