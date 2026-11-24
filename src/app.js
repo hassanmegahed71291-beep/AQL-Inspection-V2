@@ -97,6 +97,15 @@ function restoreScrollState(snap){if(!snap)return;requestAnimationFrame(()=>{
   window.scrollTo(snap.windowX||0,snap.windowY||0);
   (snap.items||[]).forEach(it=>{const els=[...document.querySelectorAll('#view *')].filter(x=>[...x.classList].sort().join('.')===it.cls);const el=els[it.index];if(el){el.scrollTop=it.top;el.scrollLeft=it.left}});
 });}
+/* ---- keep user input when switching language (v24) ---- */
+let VS={};const keepView=(k,init)=>VS[k]||(VS[k]=init);
+const langFields=()=>[...document.querySelectorAll('#app input,#app select,#app textarea')].filter(e=>!['file','button','submit','password'].includes(e.type));
+const langSnap=()=>langFields().map(e=>({t:e.tagName+':'+(e.type||''),v:e.value,c:e.checked}));
+const langRestore=snap=>{const els=langFields();if(els.length!==snap.length||els.some((e,i)=>e.tagName+':'+(e.type||'')!==snap[i].t))return;
+  const live=!['new','i'].includes(ROUTE.split('/')[1]||'');
+  els.forEach((e,i)=>{const o=snap[i];if(e.type==='checkbox'||e.type==='radio'){if(e.checked!==o.c){e.checked=o.c;if(live)e.dispatchEvent(new Event('change',{bubbles:true}))}}
+    else if(e.value!==o.v){e.value=o.v;if(live){e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}))}}})};
+function switchLang(){const snap=langSnap();S.lang=S.lang==='en'?'ar':'en';LS.set('lang',S.lang);render();langRestore(snap)}
 function go(x){if(x===ROUTE)return;
   if(dirty&&!confirm(L('You have unsaved changes. Leave without saving?','لديك تغييرات غير محفوظة. المغادرة دون حفظ؟')))return;
   ROUTE_SCROLL.set(ROUTE,captureScrollState());dirty=false;ROUTE=x;SCROLL_TO_TOP=true;
@@ -113,7 +122,7 @@ window.addEventListener('hashchange',syncRouteFromHistory);
 document.addEventListener('click',e=>{const a=e.target.closest&&e.target.closest('a[href^="#/"]');if(a){e.preventDefault();go(a.getAttribute('href'))}});
 function newIns(){return{id:insId(),createdAt:Date.now(),status:'draft',orderNo:'',customer:'',model:'',color:'',garmentType:'jacket',orderQty:'',lotSize:'',sampleSize:'',date:nowLocal(),notes:'',comment:'',poCustomer:'',item:'',style:'',salesOrder:'',actualQty:'',packingPct:'',startCode:'',endCode:'',rows:[],props:{},secs:{},defs:[],itemPhotos:[],defPhotos:[],measOn:false,meas:{},measSamples:'',measSizes:'',createdBy:S.me?S.me.id:'',inspectorName:S.me?S.me.name:'',result:null,decisionNote:'',aql:null,history:[]}}
 const MGRNAV=['#/','#/aql','#/settings','#/monthly','#/compare','#/cmpcust'],isMgr=()=>!!(S.me&&S.me.role==='manager'),mine=i=>!!S.me&&(i.createdBy===S.me.id||i.inspectorName===S.me.name);
-async function route(){const parts=ROUTE.split('/');const a=parts[1]||'',b=parts.slice(2).join('/');
+async function route(){VS={};const parts=ROUTE.split('/');const a=parts[1]||'',b=parts.slice(2).join('/');
   if(S.me&&!isMgr()&&['','aql','settings','compare','monthly','cmpcust'].includes(a)){ROUTE='#/new';return route()}
   if(a==='files'){ROUTE='#/archive';return route()}
   if(a==='new'){D=newIns();dirty=false;errs=[];okMsg=''}
@@ -164,13 +173,13 @@ function render(){document.documentElement.lang=S.lang;document.documentElement.
   const navs=NAV.filter(n=>isMgr()||!MGRNAV.includes(n[0])),outBtn=h('button',{class:'btn ghost s',onClick:signOut},'⎋ '+L('Sign out','خروج'));
   const scrollSnapshot=LIB_EDIT_SCROLL||captureScrollState(),hash=ROUTE,a='#/'+(hash.split('/')[1]||'');
   const curNav=NAV.find(n=>n[0]===(a==='#/i'?'#/archive':a==='#/report'?'#/reports':a))||NAV[0];
-  const sw=h('button',{class:'btn ghost s',onClick:()=>{S.lang=S.lang==='en'?'ar':'en';LS.set('lang',S.lang);render()}},S.lang==='en'?'العربية':'English');
+  const sw=h('button',{class:'btn ghost s',onClick:()=>{switchLang()}},S.lang==='en'?'العربية':'English');
   const link=n=>h('a',{href:n[0],class:n===curNav?'on':''},h('span',{},n[1]),' ',L(n[2],n[3]));
   const name='MEYAR',fac=S.settings.factoryName;
   const v=({'':vPanel,new:vIns,i:vIns,archive:()=>vList(false),reports:()=>vList(true),charts:vCharts,monthly:vMonthly,compare:vCompare,cmpcust:vCmpCust,library:vLib,customers:vCustomers,aql:vAql,settings:vSettings,inspset:vInspSet,report:vReport,cloud:vCloud})[hash.split('/')[1]||'']||vDash;
   $('#app').replaceChildren(h('div',{class:'shell'},
     h('aside',{class:'side'},h('div',{class:'brand'},h('div',{class:'brand-wordmark',dir:'ltr'},h('img',{src:'./icons/meyar-192.png',alt:'M'}),h('b',{},'EYAR')),h('small',{},fac)),navs.map(link),h('div',{style:'margin-top:auto;display:grid;gap:8px'},themeButton(),h('small',{style:'color:#8fa6bb;padding:0 8px'},S.me.name+' · '+(isMgr()?L('Manager','مدير'):L('Inspector','مفتش'))),sw,outBtn)),
-    h('div',{class:'main'+(hash.split('/')[1]==='report'?' inspection-report-route':'')},h('header',{class:'top'},(ROUTE!=='#/'&&!ROUTE.startsWith('#/report/')?h('button',{class:'top-action page-back',type:'button','aria-label':L('Back','رجوع'),title:L('Back','رجوع'),onClick:()=>{if(history.state&&history.state.from)history.back();else go('#/')}},'←'):null),h('button',{class:'menu-toggle',type:'button','aria-label':'Open navigation',title:L('Menu','القائمة'),onClick:()=>{const m=$('#top-menu');if(m)m.classList.toggle('open')}},'☰'),cloudChipEl(),h('button',{class:'top-action lang-action',type:'button',title:L('Change language','تغيير اللغة'),onClick:()=>{S.lang=S.lang==='en'?'ar':'en';LS.set('lang',S.lang);render()}},'🌐'),h('button',{class:'top-action logout-action',type:'button',title:L('Sign out','تسجيل الخروج'),onClick:signOut},'↪'),h('div',{class:'top-brand',dir:'ltr'},h('img',{src:'./icons/meyar-192.png',alt:'MEYAR'}),h('span',{},'MEYAR')),h('span',{id:'autosave-status',class:'autosave-status'},dirty?L('Unsaved changes','تغييرات غير محفوظة'):L('Saved','تم الحفظ'))),h('nav',{id:'top-menu',class:'top-menu'},[...navs.map(link),h('div',{class:'menu-theme'},themeButton())]),h('main',{id:'view'},pagePdfBar(),v()))));
+    h('div',{class:'main'+(hash.split('/')[1]==='report'?' inspection-report-route':'')},h('header',{class:'top'},(ROUTE!=='#/'&&!ROUTE.startsWith('#/report/')?h('button',{class:'top-action page-back',type:'button','aria-label':L('Back','رجوع'),title:L('Back','رجوع'),onClick:()=>{if(history.state&&history.state.from)history.back();else go('#/')}},'←'):null),h('button',{class:'menu-toggle',type:'button','aria-label':'Open navigation',title:L('Menu','القائمة'),onClick:()=>{const m=$('#top-menu');if(m)m.classList.toggle('open')}},'☰'),cloudChipEl(),h('button',{class:'top-action lang-action',type:'button',title:L('Change language','تغيير اللغة'),onClick:()=>{switchLang()}},'🌐'),h('button',{class:'top-action logout-action',type:'button',title:L('Sign out','تسجيل الخروج'),onClick:signOut},'↪'),h('div',{class:'top-brand',dir:'ltr'},h('img',{src:'./icons/meyar-192.png',alt:'MEYAR'}),h('span',{},'MEYAR')),h('span',{id:'autosave-status',class:'autosave-status'},dirty?L('Unsaved changes','تغييرات غير محفوظة'):L('Saved','تم الحفظ'))),h('nav',{id:'top-menu',class:'top-menu'},[...navs.map(link),h('div',{class:'menu-theme'},themeButton())]),h('main',{id:'view'},pagePdfBar(),v()))));
   if(SCROLL_TO_TOP){SCROLL_TO_TOP=false;requestAnimationFrame(()=>scrollTo(0,0))}else restoreScrollState(scrollSnapshot);if(!LE)LIB_EDIT_SCROLL=null}
 /* ---------- dashboard ---------- */
 function vDash(){const done=S.ins.filter(i=>['approved','rejected'].includes(i.status));const c=s=>S.ins.filter(i=>s.includes(i.status)).length;const defs=done.flatMap(i=>i.defs||[]);const sum=k=>defs.reduce((a,d)=>a+num(d[k]),0);
@@ -242,7 +251,7 @@ function archFolders(rows,o){
       h('div',{class:'list'},g.rows.map(i=>archReportRow(i,o.toTrash)))))):h('div',{class:'card empty'},h('h2',{},L('No reports in this folder yet','لا توجد تقارير في هذا الفولدر بعد')));
   }
   return [head,body]}
-function vList(rep){const F={q:'',st:[],g:[],cu:[],ins:[],rd:[],ty:[],po:[],mo:[],mn:[],wk:[],dy:[],ot:[]};const box=h('div',{class:'list'});
+function vList(rep){const F=keepView('list'+(rep?'R':'A'),{q:'',st:[],g:[],cu:[],ins:[],rd:[],ty:[],po:[],mo:[],mn:[],wk:[],dy:[],ot:[]});const box=h('div',{class:'list'});
   const tb=rep?null:h('button',{type:'button',class:'btn s',onClick:()=>{F.trash=!F.trash;fill()}}),vb=rep?null:h('button',{type:'button',class:'btn s',onClick:()=>{ARCH.view=ARCH.view==='folders'?'list':'folders';fill()}}),banner=h('p',{class:'hint'}),
     emptyBtn=h('button',{type:'button',class:'btn s d',onClick:async()=>{if(!S.trash.length)return;if(!confirm(L('Permanently delete everything in the trash?','حذف كل محتويات السلة نهائياً؟')))return;const n=S.trash.length;for(const x of S.trash)await DB.del('inspections',x.id);await audit('trash_emptied','-',{n});await loadAll();fill()}},'🗑 '+L('Empty trash','إفراغ السلة'));
   const fill=()=>{const trash=!rep&&!!F.trash;
@@ -318,7 +327,7 @@ async function chartsExport(btn,last,fdesc){const t=btn.textContent;btn.disabled
   try{const d=new Date(),p=n=>String(n).padStart(2,'0');cmpSaveBlob(await chartsMakePdf(last,fdesc()),`Pie-Charts-${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}.pdf`)}
   catch(e){alert(L('Export failed: ','فشل التصدير: ')+(e&&e.message||e))}btn.disabled=false;btn.textContent=t}
 function vCharts(){
-  const F={from:'',to:'',cu:[],mo:[],g:[],rd:[],ty:[],sev:[],po:[],mn:[],wk:[],dy:[],ot:[],basis:'pieces',meas:'reports'};const out=h('div',{class:'stack'});
+  const F=keepView('charts',{from:'',to:'',cu:[],mo:[],g:[],rd:[],ty:[],sev:[],po:[],mn:[],wk:[],dy:[],ot:[],basis:'pieces',meas:'reports'});const out=h('div',{class:'stack'});
   const MEAS=()=>[['reports',L('Reports','التقارير')],['defects',L('Defects','العيوب')],['accepted',L('Accepted','المقبولة')],['rejected',L('Rejected','المرفوضة')]];
   const dOf=i=>String(i.date||'').slice(0,10);
   const dc=i=>(i.defs||[]).filter(d=>msIn(F.sev,d.severity)).reduce((a,d)=>a+num(d[F.basis]),0);
@@ -1612,7 +1621,7 @@ function vCmpCust(){
 function archTabs(cur){return null}
 
 function vFiles(){
- const F={q:'',st:'',by:'',lk:''},box=h('div',{class:'list'}),msg=h('p',{class:'hint cloud-msg'}),sum=h('p',{class:'hint'});let rows=[],bulkBtn=null;
+ const F=keepView('cloud',{q:'',st:'',by:'',lk:''}),box=h('div',{class:'list'}),msg=h('p',{class:'hint cloud-msg'}),sum=h('p',{class:'hint'});let rows=[],bulkBtn=null;
  const say=(en,ar)=>{msg.textContent=L(en,ar)},sayErr=e=>{msg.textContent=L('Error: ','خطأ: ')+((e&&e.message)||e)};
  const guard=async(b,fn)=>{const t=b&&b.textContent;if(b)b.disabled=true;try{await fn()}catch(e){sayErr(e)}finally{if(b){b.disabled=false;if(t)b.textContent=t}}};
  const dtf=ts=>ts?new Date(ts).toLocaleString(S.lang==='ar'?'ar-EG':'en-GB',{dateStyle:'medium',timeStyle:'short'}):'';
@@ -2167,7 +2176,7 @@ const mgrCount=()=>S.members.filter(m=>m.role==='manager'&&m.active).length;
 async function addMember(name,role,pin){const salt=uid(8),m={id:'m_'+uid(8),name,role,salt,hash:await pinHash(pin,salt),active:true,createdAt:Date.now()};S.members.push(m);await saveMembers();return m}
 async function startSession(m,remember){S.me=m;SS.set('meId',m.id);if(remember)LS.set('meId',m.id);else LS.del('meId');ROUTE=isMgr()?'#/':'#/new';try{history.replaceState(null,'',ROUTE)}catch(e){}await route()}
 function signOut(){SS.del('meId');LS.del('meId');S.me=null;D=null;dirty=false;render()}
-const langBtn=()=>h('button',{class:'btn s',onClick:()=>{S.lang=S.lang==='en'?'ar':'en';LS.set('lang',S.lang);render()}},S.lang==='en'?'العربية':'English');
+const langBtn=()=>h('button',{class:'btn s',onClick:()=>{switchLang()}},S.lang==='en'?'العربية':'English');
 const pinOk=p=>/^\d{4,8}$/.test(p||'');
 function vSetup(){const nm=h('input',{placeholder:L('Your full name','اسمك الكامل'),autocomplete:'off'}),p1=h('input',{type:'password',inputmode:'numeric',maxlength:8,placeholder:L('PIN (4–8 digits)','رقم سري (4–8 أرقام)')}),p2=h('input',{type:'password',inputmode:'numeric',maxlength:8,placeholder:L('Repeat the PIN','أعد كتابة الرقم السري')}),msg=h('p',{class:'err'});
   return h('div',{class:'auth-wrap'},h('div',{class:'auth-visual'},h('img',{src:'./images/aql-login-inspector.png',alt:'AQL Inspection quality inspector'})),h('div',{class:'card form auth-card',style:'max-width:460px;width:100%'},h('div',{class:'row',style:'justify-content:space-between;align-items:center'},h('h2',{style:'margin:0'},L('Create the manager account','إنشاء حساب المدير')),h('div',{class:'row'},themeButton(),langBtn())),
