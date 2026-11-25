@@ -122,7 +122,7 @@ window.addEventListener('hashchange',syncRouteFromHistory);
 document.addEventListener('click',e=>{const a=e.target.closest&&e.target.closest('a[href^="#/"]');if(a){e.preventDefault();go(a.getAttribute('href'))}});
 function newIns(){return{id:insId(),createdAt:Date.now(),status:'draft',orderNo:'',customer:'',model:'',color:'',garmentType:'jacket',orderQty:'',lotSize:'',sampleSize:'',date:nowLocal(),notes:'',comment:'',poCustomer:'',item:'',style:'',salesOrder:'',actualQty:'',packingPct:'',startCode:'',endCode:'',rows:[],props:{},secs:{},defs:[],itemPhotos:[],defPhotos:[],measOn:false,meas:{},measSamples:'',measSizes:'',createdBy:S.me?S.me.id:'',inspectorName:S.me?S.me.name:'',result:null,decisionNote:'',aql:null,history:[]}}
 const MGRNAV=['#/','#/aql','#/settings','#/monthly','#/compare','#/cmpcust'],isMgr=()=>!!(S.me&&S.me.role==='manager'),mine=i=>!!S.me&&(i.createdBy===S.me.id||i.inspectorName===S.me.name);
-async function route(){VS={};const parts=ROUTE.split('/');const a=parts[1]||'',b=parts.slice(2).join('/');
+async function route(){VS={};const parts=ROUTE.split('/');const a=parts[1]||'',b=parts.slice(2).join('/');if(a!=='customers'){CUS_V=null;CI_E=null}
   if(S.me&&!isMgr()&&['','aql','settings','compare','monthly','cmpcust'].includes(a)){ROUTE='#/new';return route()}
   if(a==='files'){ROUTE='#/archive';return route()}
   if(a==='new'){D=newIns();dirty=false;errs=[];okMsg=''}
@@ -179,7 +179,7 @@ function render(){document.documentElement.lang=S.lang;document.documentElement.
   const v=({'':vPanel,new:vIns,i:vIns,archive:()=>vList(false),reports:()=>vList(true),charts:vCharts,monthly:vMonthly,compare:vCompare,cmpcust:vCmpCust,library:vLib,customers:vCustomers,aql:vAql,settings:vSettings,inspset:vInspSet,report:vReport,cloud:vCloud})[hash.split('/')[1]||'']||vDash;
   $('#app').replaceChildren(h('div',{class:'shell'},
     h('aside',{class:'side'},h('div',{class:'brand'},h('div',{class:'brand-wordmark',dir:'ltr'},h('img',{src:'./icons/meyar-192.png',alt:'M'}),h('b',{},'EYAR')),h('small',{},fac)),navs.map(link),h('div',{style:'margin-top:auto;display:grid;gap:8px'},themeButton(),h('small',{style:'color:#8fa6bb;padding:0 8px'},S.me.name+' · '+(isMgr()?L('Manager','مدير'):L('Inspector','مفتش'))),sw,outBtn)),
-    h('div',{class:'main'+(hash.split('/')[1]==='report'?' inspection-report-route':'')},h('header',{class:'top'},(ROUTE!=='#/'&&!ROUTE.startsWith('#/report/')?h('button',{class:'top-action page-back',type:'button','aria-label':L('Back','رجوع'),title:L('Back','رجوع'),onClick:()=>{if(history.state&&history.state.from)history.back();else go('#/')}},'←'):null),h('button',{class:'menu-toggle',type:'button','aria-label':'Open navigation',title:L('Menu','القائمة'),onClick:()=>{const m=$('#top-menu');if(m)m.classList.toggle('open')}},'☰'),cloudChipEl(),h('button',{class:'top-action lang-action',type:'button',title:L('Change language','تغيير اللغة'),onClick:()=>{switchLang()}},'🌐'),h('button',{class:'top-action logout-action',type:'button',title:L('Sign out','تسجيل الخروج'),onClick:signOut},'↪'),h('div',{class:'top-brand',dir:'ltr'},h('img',{src:'./icons/meyar-192.png',alt:'MEYAR'}),h('span',{},'MEYAR')),h('span',{id:'autosave-status',class:'autosave-status'},dirty?L('Unsaved changes','تغييرات غير محفوظة'):L('Saved','تم الحفظ'))),h('nav',{id:'top-menu',class:'top-menu'},[...navs.map(link),h('div',{class:'menu-theme'},themeButton())]),h('main',{id:'view'},pagePdfBar(),v()))));
+    h('div',{class:'main'+(hash.split('/')[1]==='report'?' inspection-report-route':'')},h('header',{class:'top'},(ROUTE!=='#/'&&!ROUTE.startsWith('#/report/')?h('button',{class:'top-action page-back',type:'button','aria-label':L('Back','رجوع'),title:L('Back','رجوع'),onClick:()=>{if(history.state&&history.state.from)history.back();else go('#/')}},'←'):null),h('button',{class:'menu-toggle',type:'button','aria-label':'Open navigation',title:L('Menu','القائمة'),onClick:()=>{const m=$('#top-menu');if(m)m.classList.toggle('open')}},'☰'),cloudChipEl(),h('button',{class:'top-action lang-action',type:'button',title:L('Change language','تغيير اللغة'),onClick:()=>{switchLang()}},'🌐'),h('button',{class:'top-action logout-action',type:'button',title:L('Sign out','تسجيل الخروج'),onClick:signOut},'↪'),h('div',{class:'top-brand',dir:'ltr'},h('img',{src:'./icons/meyar-192.png',alt:'MEYAR'}),h('span',{},'MEYAR')),h('span',{id:'autosave-status',class:'autosave-status'},dirty?L('Unsaved changes','تغييرات غير محفوظة'):L('Saved','تم الحفظ'))),h('nav',{id:'top-menu',class:'top-menu'},[...navs.map(link),h('div',{class:'menu-theme'},themeButton())]),h('main',{id:'view'},pageHead(),pagePdfBar(),v()))));
   if(SCROLL_TO_TOP){SCROLL_TO_TOP=false;requestAnimationFrame(()=>scrollTo(0,0))}else restoreScrollState(scrollSnapshot);if(!LE)LIB_EDIT_SCROLL=null}
 /* ---------- dashboard ---------- */
 function vDash(){const done=S.ins.filter(i=>['approved','rejected'].includes(i.status));const c=s=>S.ins.filter(i=>s.includes(i.status)).length;const defs=done.flatMap(i=>i.defs||[]);const sum=k=>defs.reduce((a,d)=>a+num(d[k]),0);
@@ -307,7 +307,7 @@ function chartsCard(s){const data=s.i.filter(x=>x.value>0),tot=data.reduce((a,x)
     tot?h('div',{style:'display:flex;gap:9px;align-items:center;margin-top:8px'},chartsPieSvg(s.i,108),
       h('div',{style:'flex:1;min-width:0;display:grid;gap:3px'},data.map((x,k)=>h('div',{style:'display:flex;align-items:center;gap:5px;font-size:8.5px;line-height:1.25'},h('i',{style:`width:9px;height:9px;border-radius:2px;flex:0 0 auto;background:${x.color||PIE_COLORS[k%PIE_COLORS.length]}`}),h('span',{style:'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'},x.label),h('b',{style:'white-space:nowrap'},`${x.value} · ${Math.round(x.value/tot*100)}%`)))))
     :h('p',{style:'font-size:9px;color:#64748b;margin:12px 0'},L('No data for the selected filters.','لا توجد بيانات للفلاتر المحددة.')))}
-async function chartsMakePdf(last,fdesc){
+async function chartsMakePdf(last,fdesc,F){
   if(!window.jspdf||!window.html2canvas)throw new Error('PDF library missing');
   const pdf=new window.jspdf.jsPDF({unit:'mm',format:'a4',orientation:'portrait',compress:true}),stage=h('div',{class:'stage',style:'position:fixed;left:-12000px;top:0;width:794px'});document.body.append(stage);
   const dir=S.lang==='ar'?'rtl':'ltr',pages=[];let page,grid;
@@ -323,8 +323,8 @@ async function chartsMakePdf(last,fdesc){
     for(let k=0;k<pages.length;k++){const c=await window.html2canvas(pages[k],{scale:2,backgroundColor:'#ffffff',useCORS:true,logging:false});if(k)pdf.addPage();pdf.addImage(c.toDataURL('image/jpeg',.93),'JPEG',0,0,210,297,undefined,'FAST')}}
   finally{stage.remove()}
   return pdf.output('blob')}
-async function chartsExport(btn,last,fdesc){const t=btn.textContent;btn.disabled=true;btn.textContent=L('Preparing…','جارٍ التجهيز…');
-  try{const d=new Date(),p=n=>String(n).padStart(2,'0');cmpSaveBlob(await chartsMakePdf(last,fdesc()),`Pie-Charts-${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}.pdf`)}
+async function chartsExport(btn,last,fdesc,F){const t=btn.textContent;btn.disabled=true;btn.textContent=L('Preparing…','جارٍ التجهيز…');
+  try{const d=new Date(),p=n=>String(n).padStart(2,'0');cmpSaveBlob(await chartsMakePdf(last,fdesc(),F),`Pie-Charts-${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}.pdf`)}
   catch(e){alert(L('Export failed: ','فشل التصدير: ')+(e&&e.message||e))}btn.disabled=false;btn.textContent=t}
 function vCharts(){
   const F=keepView('charts',{from:'',to:'',cu:[],mo:[],g:[],rd:[],ty:[],sev:[],po:[],mn:[],wk:[],dy:[],ot:[],basis:'pieces',meas:'reports'});const out=h('div',{class:'stack'});
@@ -382,7 +382,7 @@ function vCharts(){
     msBtn(L('Inspection Type','نوع الفحص'),TYPE_OPTS,F.ty,fill),
     msBtn(L('Severity','التصنيف'),()=>SEV.map(k=>[k,L(...sevL[k])]),F.sev,fill),
     sel(L('Measure (customer / weekly / monthly)','القياس (عملاء / أسبوعي / شهري)'),'meas',MEAS()),
-    sel(L('Count defects by','عدّ العيوب حسب'),'basis',[['pieces',L('Affected pieces','القطع المتأثرة')],['occurrences',L('Occurrences','مرات الحدوث')]]),h('button',{type:'button',class:'btn p',onClick:e=>chartsExport(e.currentTarget,last,fdesc)},'⬇ '+L('Export PDF (A4)','تصدير PDF (A4)'))),out)}
+    sel(L('Count defects by','عدّ العيوب حسب'),'basis',[['pieces',L('Affected pieces','القطع المتأثرة')],['occurrences',L('Occurrences','مرات الحدوث')]]),h('button',{type:'button',class:'btn p',onClick:e=>chartsExport(e.currentTarget,last,fdesc,F)},'⬇ '+L('Export PDF (A4)','تصدير PDF (A4)'))),out)}
 /* ---------- monthly quality report ---------- */
 function monthlyData(month,filters={}){
   const rows=S.ins.filter(i=>['approved','rejected'].includes(i.status)&&String(i.date||'').slice(0,7)===month&&msInC(filters.customer,i.customer)&&msIn(filters.model,i.model)&&msIn(filters.inspector,i.inspectorName)&&msIn(filters.po,String(i.orderNo||'').trim())&&msIn(filters.ot,msOt(i))&&msG(filters.g,i));
@@ -575,9 +575,9 @@ const CMP_PH=1123,CMP_PAD=46,CMP_BOTTOM=1123-46-44;
 const cmpLogo=()=>h('div',{class:'rlh',style:'margin-bottom:8px'},h('img',{class:'rlogo',src:S.settings.logo||DEF_LOGO}),h('div',{class:'rlogotxt'},String(S.settings.factoryName||'').toUpperCase().split(/\s+/).filter(Boolean).map(w=>h('div',{},w))));
 
 function analysisReportHeader(title,rows){
-  const logo=h('div',{style:'width:30%;min-width:180px;display:flex;align-items:center;gap:10px'},h('img',{src:S.settings.logo||DEF_LOGO,style:'width:66px;height:66px;object-fit:contain;flex:0 0 auto'}),h('div',{},h('div',{style:'font-size:20px;font-weight:800;letter-spacing:1px;color:#17365b'},'MEYAR'),h('div',{style:'font-size:9px;font-weight:700;color:#64748b'},String(S.settings.factoryName||'').toUpperCase())));
-  const table=h('table',{style:'width:100%;border-collapse:collapse;table-layout:fixed;font-size:9.5px;direction:rtl'},h('tbody',{},rows.map(([k,v])=>h('tr',{},h('th',{style:'width:29%;background:#eaf1f8;border:1px solid #9fb2c7;padding:5px 7px;text-align:right;color:#17365b;white-space:normal'},k),h('td',{style:'border:1px solid #9fb2c7;padding:5px 7px;text-align:right;font-weight:700;color:#172b45;overflow-wrap:anywhere;background:#fff'},String(v==null||v===''?'—':v))))));
-  return h('div',{style:'display:flex;align-items:flex-start;justify-content:space-between;gap:16px;direction:ltr;border-bottom:3px solid #17365b;padding-bottom:9px;margin-bottom:10px;min-height:78px'},logo,h('div',{style:'width:67%;text-align:right'},h('div',{style:'font-size:16px;font-weight:800;color:#17365b;text-align:right;margin-bottom:5px'},title),table));
+  const left=h('div',{style:'width:33%;min-width:190px;flex:0 0 auto'},cmpLogo(),h('div',{style:'font-size:14px;font-weight:800;color:#17365b;margin-top:6px;line-height:1.35'},title));
+  const table=h('table',{style:'width:100%;border-collapse:collapse;table-layout:fixed;font-size:9.5px;direction:ltr'},h('tbody',{},rows.map(([k,v])=>h('tr',{},h('th',{style:'width:30%;background:#eaf1f8;border:1px solid #9fb2c7;padding:5px 7px;text-align:left;color:#17365b;white-space:normal;unicode-bidi:plaintext'},k),h('td',{style:'border:1px solid #9fb2c7;padding:5px 7px;text-align:left;font-weight:700;color:#172b45;overflow-wrap:anywhere;background:#fff;unicode-bidi:plaintext'},String(v==null||v===''?'—':v))))));
+  return h('div',{style:'display:flex;align-items:flex-start;justify-content:space-between;gap:16px;direction:ltr;border-bottom:3px solid #17365b;padding-bottom:9px;margin-bottom:10px;min-height:78px'},left,h('div',{style:'flex:1;min-width:0'},table));
 }
 const analysisDateRange=(from,to)=>from&&to?`${fmtDate(from)} – ${fmtDate(to)}`:from?`${L('From','من')} ${fmtDate(from)}`:to?`${L('To','إلى')} ${fmtDate(to)}`:L('All available dates','كل الفترات المتاحة');
 
@@ -838,7 +838,9 @@ function vIns(){if(!D)return h('div',{class:'card empty'},h('h2',{},L('Inspectio
     return h('div',{class:'warn'},'⚠ '+L(`This order was already inspected ${m.length} time(s). Last: `,`هذا الأوردر تم فحصه من قبل ${m.length} مرة. آخرها: `)+last.id+' · '+stL(last.status)+(last.result?' · '+(last.result==='accepted'?L('accepted','مقبول'):L('rejected','مرفوض')):''),
       h('div',{class:'row wrap',style:'margin-top:6px'},h('a',{class:'btn s',href:'#/i/'+last.id},L('Open it','فتحه')),isNew?h('button',{type:'button',class:'btn s',onClick:()=>copyFrom(last)},L('Copy its data','نسخ بياناته')):null,h('span',{class:'hint'},L('This will be saved as re-inspection no. ','سيُحفظ كإعادة فحص رقم ')+(m.length+1))))};
   const prevSel=isNew&&ed?h('label',{},L('Copy from a previous inspection (optional)','نسخ من فحص سابق (اختياري)'),h('select',{onChange:e=>{const src=S.ins.find(x=>x.id===e.target.value);e.target.value='';if(!src)return;if(D.orderNo&&!confirm(L('Replace the data typed so far?','استبدال البيانات المكتوبة حتى الآن؟')))return;copyFrom(src)}},h('option',{value:''},'—'),S.ins.filter(x=>isMgr()||mine(x)).slice(0,40).map(x=>h('option',{value:x.id},`${x.orderNo} · ${x.customer||''} · ${String(x.date).slice(0,10)}`)))):null;
-  const basicsEl=h('div',{class:'form basics'},prevSel,f(L('Order number','رقم الطلبية')+' *','orderNo'),h('div',{'data-live':'dup'},dupBanner()),f(L('Color','اللون'),'color'),sampleBox,rowsUI,h('label',{},L('General notes','ملاحظات عامة'),h('textarea',{onInput:e=>{D.notes=e.target.value;dt()}},D.notes)));
+  const cRec=ed?custRecFor(D.customer):null,nIt=cRec?ciRecs(cRec).length:0;
+  const custFillEl=ed?h('div',{class:'custfill'},nIt?h('button',{type:'button',class:'btn p',onClick:()=>custFillSheet(cRec)},'📥 '+L('Fill from customer data','تعبئة من بيانات العميل')+' ('+nIt+')'):h('p',{class:'hint'},!D.customer?L('Choose the customer to fill the data automatically.','اختر العميل لتعبئة البيانات تلقائياً.'):L('No saved data for this customer yet.','لا توجد بيانات محفوظة لهذا العميل بعد.'),D.customer?h('a',{href:'#/customers',style:'margin-inline-start:6px'},L('Open Customers','فتح العملاء')):null),D.fillSrc?h('p',{class:'hint'},'✔ '+L('Filled from customer data. Fields you change are highlighted in yellow.','تمت التعبئة من بيانات العميل. أي خانة تعدّلها تظهر باللون الأصفر.')):null):null;
+  const basicsEl=h('div',{class:'form basics'},custFillEl,prevSel,f(L('Order number','رقم الطلبية')+' *','orderNo'),h('div',{'data-live':'dup'},dupBanner()),f(L('Color','اللون'),'color'),sampleBox,rowsUI,h('label',{},L('General notes','ملاحظات عامة'),h('textarea',{onInput:e=>{D.notes=e.target.value;dt()}},D.notes)));
   /* defect table (the report's "Details of Defect Found" is the entry grid) */
   const libFor=g=>S.lib.filter(l=>l.active!==false&&(!l.garments||!l.garments.length||l.garments.includes(g)));
   const us=usageMap(),dnm2=l=>S.lang==='ar'?(l.nameAr||l.nameEn):l.nameEn;
@@ -858,8 +860,8 @@ function vIns(){if(!D)return h('div',{class:'card empty'},h('h2',{},L('Inspectio
     ed?h('button',{type:'button',class:'btn s',onClick:()=>{if(confirm(L('Delete this defect?','حذف هذا العيب؟'))){D.defs=D.defs.filter(z=>z!==x);dt();render()}}},'🗑 '+L('Delete defect','حذف العيب')):null)))};
   const E={canEdit:ed,
     sel:(k,opts)=>h('select',{value:String(D[k]??''),onChange:e=>{D[k]=e.target.value;dt()}},h('option',{value:''},''),opts.map(([v,t])=>h('option',{value:v},t))),
-    cust:()=>h('button',{type:'button',class:'custbtn',onClick:()=>csPick(D.customer,v=>{D.customer=v;dt();render()})},(D.customer||L('Choose customer…','اختر العميل…'))+' ▾'),inp:(k,at,rr)=>h('input',Object.assign({},at,{value:D[k]??'',onInput:e=>{D[k]=e.target.value;dt();if(rr||D.measOn)softRender()}})),
-    item:()=>h('select',{value:D.garmentType==='both'?'suit':D.garmentType,onChange:e=>{D.garmentType=e.target.value;dt();render()}},GT.map(g=>h('option',{value:g},gName(g)))),
+    cust:()=>h('button',{type:'button',class:'custbtn',onClick:()=>csPick(D.customer,v=>{if(v!==D.customer)D.fillSrc=null;D.customer=v;dt();render()})},(D.customer||L('Choose customer…','اختر العميل…'))+' ▾'),inp:(k,at,rr)=>h('input',Object.assign({},at,{class:fillEdited(k)?'cedit':null,value:D[k]??'',onInput:e=>{D[k]=e.target.value;dt();e.target.classList.toggle('cedit',fillEdited(k));if(rr||D.measOn)softRender()}})),
+    item:()=>h('select',{class:fillEdited('garmentType')?'cedit':null,value:D.garmentType==='both'?'suit':D.garmentType,onChange:e=>{D.garmentType=e.target.value;dt();render()}},GT.map(g=>h('option',{value:g},gName(g)))),
     itemPhotos:()=>h('div',{class:'ipw'},D.itemPhotos.length?null:h('p',{class:'hint'},L('Add photos of the actual item (front, inside, back, labels…). Captions are optional.','أضف صور المنتج الفعلي (الأمام، الداخل، الخلف، الليبلات…). التعليق اختياري.')),
       h('div',{class:'pg'},D.itemPhotos.map((x,k)=>h('figure',{},h('img',{src:x.p,onClick:()=>window.open(x.p)}),ed?h('button',{type:'button',class:'annbtn',onClick:()=>annotatePhoto(x,()=>{dt();render()})},'✏️'):null,h('figcaption',{},h('input',{value:x.cap||'',placeholder:L('Caption (optional)','تعليق (اختياري)'),onInput:e=>{x.cap=e.target.value;dt()}}),ed?h('button',{type:'button',class:'xbtn',onClick:()=>{D.itemPhotos.splice(k,1);dt();render()}},'×'):null)))),
       ed?h('div',{class:'row wrap',style:'margin-top:8px'},h('button',{type:'button',class:'btn s',onClick:()=>pickPhotos(true,p=>{D.itemPhotos.push({p,cap:''});dt();render()})},'📷 '+L('Camera','الكاميرا')),h('button',{type:'button',class:'btn s',onClick:()=>pickPhotos(false,p=>{D.itemPhotos.push({p,cap:''});dt();render()})},'🖼 '+L('Gallery','المعرض'))):null),
@@ -1588,6 +1590,7 @@ function vCmpCust(){
  const all=()=>S.ins.filter(i=>['approved','rejected'].includes(i.status)&&(isMgr()||mine(i)));
  if(!CMPC.init){const ms=msOptsOf(all(),'mon');CMPC.mn=ms.length?[ms[0][0]]:[];CMPC.init=true}
  const out=h('div',{class:'stack cccust-output'}),COL=['#2563eb','#f59e0b','#16a34a','#dc2626','#7c3aed','#0891b2'],fmtN=n=>Math.round(n).toLocaleString();let latest={list:[],sum:[],period:'overall'};
+  const run=async(b,fn)=>{const t=b.textContent;b.disabled=true;b.textContent=L('Preparing…','جارٍ التجهيز…');try{await fn()}catch(e){alert(L('Export failed: ','فشل التصدير: ')+(e&&e.message||e))}b.disabled=false;b.textContent=t};
  const makePdf=async()=>{
   if(!window.jspdf||!window.html2canvas)throw new Error('PDF library missing');
   const {list,sum,period}=latest;if(!list.length)throw new Error(L('No comparison data to export.','لا توجد بيانات مقارنة لتصديرها.'));
@@ -2120,6 +2123,9 @@ async function makeXlsx(i){
 
 /* ---------- A4 PDF export for any data page (added 19 Nov 2026) ---------- */
 const PAGE_PDF_ROUTES=['','archive','reports','library','aql'];
+/* logo + factory name + page title at the top of every page (same look as the inspection report) */
+function pageHead(){const a=ROUTE.split('/')[1]||'';if(a==='report')return null;const nav=NAV.find(n=>n[0]==='#/'+a);
+ return h('div',{class:'pghead'},cmpLogo(),nav?h('div',{class:'pghead-t'},L(nav[2],nav[3])):null)}
 function pagePdfBar(){const a=ROUTE.split('/')[1]||'';if(!PAGE_PDF_ROUTES.includes(a))return null;const nav=NAV.find(n=>n[0]==='#/'+a)||NAV[0];
  return h('div',{class:'noprint',style:'margin-bottom:10px'},h('button',{type:'button',class:'btn s',onClick:e=>pageToPdf(e.currentTarget,L(nav[2],nav[3]),nav[2])},'⬇ '+L('Export PDF (A4)','تصدير PDF (A4)')))}
 async function pageToPdf(btn,title,en){const t=btn.textContent;btn.disabled=true;btn.textContent=L('Preparing…','جارٍ التجهيز…');
@@ -2131,7 +2137,7 @@ async function makePagePdf(title){
  try{await document.fonts.ready}catch(e){}
  const scale=Math.max(.8,Math.min(2,26000/Math.max(1,view.scrollHeight)));let cuts=[],cssW=794;
  const canvas=await window.html2canvas(view,{scale,backgroundColor:'#ffffff',useCORS:true,logging:false,windowWidth:794,
-  onclone:(doc)=>{const v=doc.getElementById('view');if(!v)return;
+  onclone:(doc)=>{const v=doc.getElementById('view');if(!v)return;doc.querySelectorAll('.pghead').forEach(n=>n.remove());
    doc.querySelectorAll('.noprint,button,.btn,input[type=file]').forEach(n=>n.remove());
    doc.querySelectorAll('input,textarea').forEach(n=>{if(!n.value&&n.type!=='checkbox'&&n.type!=='radio')n.remove()});doc.querySelectorAll('select').forEach(n=>{if(n.selectedIndex<=0)n.remove()});
    const d=new Date(),logo=h('img',{class:'rlogo',src:S.settings.logo||DEF_LOGO});
@@ -2226,6 +2232,83 @@ function csPick(cur,onPick){
  const search=h('input',{placeholder:L('Search or type a new customer…','ابحث أو اكتب اسم عميل جديد…'),onInput:e=>{q=e.target.value;draw()}});
  ov.append(h('div',{class:'mssheet'},h('div',{class:'row'},h('b',{style:'flex:1;font-size:17px'},L('Customer','العميل')),h('button',{type:'button',class:'btn s',onClick:close},'✕')),search,list));
  ov.addEventListener('click',e=>{if(e.target===ov)close()});document.addEventListener('keydown',esc);document.body.append(ov);draw();setTimeout(()=>search.focus(),50)}
+/* ===== بيانات العميل: جدول الأصناف/الأوردرات + الاستيراد من Excel + التعبئة التلقائية في الفحص (v26) ===== */
+const CI_FIELDS=[['garmentType','Item','الصنف'],['style','Style','الستايل'],['model','Model','الموديل'],['color','Color','اللون'],['orderQty','Quantity','الكمية'],['poCustomer','PO Customer','PO العميل'],['salesOrder','Sales order','أمر البيع']];
+const CI_HDR={garmentType:['item','الصنف','صنف','garment','garmenttype','type','نوع القطعة','القطعة','قطعة','المنتج'],style:['style','الستايل','ستايل','style no','style number'],model:['model','الموديل','موديل','model no'],color:['color','colour','اللون','لون'],orderQty:['quantity','qty','الكمية','كمية','order qty','order quantity','العدد'],poCustomer:['po customer','po','po no','po number','po num','po العميل','رقم po','purchase order','رقم الطلبية'],salesOrder:['sales order','so','so no','sales order no','أمر البيع','امر البيع','أمر بيع','امر بيع']};
+const CI_SYN={jacket:['jacket','جاكيت','جاكت','blazer','بليزر'],trousers:['trousers','trouser','pants','pant','بنطلون','بنطال'],vest:['vest','waistcoat','veste','فيست','صديري'],shorts:['shorts','short','شورت','شورتات'],suit:['suit','suits','بدلة','بدله','طقم']};
+const ciGarment=v=>{const n=norm(v);if(!n)return'';for(const g of GT)if((CI_SYN[g]||[]).some(x=>norm(x)===n))return g;return''};
+const ciRecs=c=>Array.isArray(c&&c.items)?c.items:[];
+const ciKey=r=>[r.garmentType,r.style,r.model,r.color,r.poCustomer,r.salesOrder].map(norm).join('|');
+const ciTitle=r=>[r.garmentType?gName(r.garmentType):'',r.style&&('Style '+r.style),r.model&&('Model '+r.model),r.color].filter(Boolean).join(' · ');
+const ciSub=r=>[r.orderQty?L('Qty ','الكمية ')+r.orderQty:'',r.poCustomer?'PO '+r.poCustomer:'',r.salesOrder?L('SO ','أمر البيع ')+r.salesOrder:''].filter(Boolean).join(' · ');
+const ciBlank=()=>({id:'ci_'+uid(6),garmentType:'',style:'',model:'',color:'',orderQty:'',poCustomer:'',salesOrder:''});
+const xlText=v=>{if(v==null)return'';if(v instanceof Date)return v.toISOString().slice(0,10);if(typeof v==='object'){if(v.richText)return v.richText.map(x=>x.text).join('').trim();if('result'in v)return xlText(v.result);if(v.text!=null)return xlText(v.text);return''}return String(v).trim()};
+async function ciReadXlsx(file){
+  if(!window.ExcelJS)throw new Error(L('Excel library missing','مكتبة Excel غير محمّلة'));
+  const wb=new ExcelJS.Workbook();await wb.xlsx.load(await file.arrayBuffer());const ws=wb.worksheets[0];
+  if(!ws)throw new Error(L('The file has no sheets.','الملف لا يحتوي على أوراق.'));
+  const grid=[];ws.eachRow({includeEmpty:false},row=>{const a=[];row.eachCell({includeEmpty:true},(cell,cn)=>{a[cn-1]=xlText(cell.value)});grid.push(a)});
+  let hi=-1,map=null;
+  for(let r=0;r<Math.min(grid.length,12);r++){const m={};(grid[r]||[]).forEach((t,ci)=>{const n=norm(t);if(!n)return;for(const k in CI_HDR)if(!(k in m)&&CI_HDR[k].some(x=>norm(x)===n))m[k]=ci});
+    if(Object.keys(m).length>=2&&Object.keys(m).length>(map?Object.keys(map).length:0)){hi=r;map=m}if(map&&Object.keys(map).length>=4)break}
+  if(!map)throw new Error(L('Could not find the column titles (Style, Model, Quantity…) in the first rows.','لم أجد عناوين الأعمدة (الستايل، الموديل، الكمية…) في أول صفوف الملف.'));
+  const rows=[];let unknownG=0;
+  for(let r=hi+1;r<grid.length;r++){const a=grid[r]||[],rec={};for(const k in map)rec[k]=String(a[map[k]]??'').trim();if(!Object.values(rec).some(Boolean))continue;
+    if('garmentType'in rec){const g=ciGarment(rec.garmentType);if(rec.garmentType&&!g)unknownG++;rec.garmentType=g}rows.push(rec)}
+  return{rows,unknownG,cols:Object.keys(map)}}
+async function ciTemplate(){
+  if(!window.ExcelJS)throw new Error(L('Excel library missing','مكتبة Excel غير محمّلة'));
+  const wb=new ExcelJS.Workbook(),ws=wb.addWorksheet('Items');
+  ws.columns=CI_FIELDS.map(([k,en])=>({header:en,key:k,width:22}));ws.getRow(1).font={bold:true};
+  ws.addRow({garmentType:'Jacket',style:'ST-1001',model:'M-55',color:'Navy',orderQty:1200,poCustomer:'PO-12345',salesOrder:'SO-998'});
+  archDl(new Blob([await wb.xlsx.writeBuffer()],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),'customer-items-template.xlsx')}
+async function ciImport(c,rows){let add=0,upd=0;c.items=ciRecs(c).slice();
+  for(const r of rows){const ex=c.items.find(x=>ciKey(x)===ciKey(r));if(ex){Object.assign(ex,r);upd++}else{c.items.push(Object.assign(ciBlank(),r));add++}}
+  await custSave(c);return{add,upd}}
+let CUS_V=null,CI_E=null;
+function vCustItems(c){
+  const msg=h('p',{class:'hint'});
+  const back=h('div',{class:'libbar'},h('button',{type:'button',class:'btn',onClick:()=>{CUS_V=null;CI_E=null;render()}},'← '+L('Customers','العملاء')),h('b',{style:'flex:1;font-size:17px'},c.name));
+  if(CI_E){const r=CI_E,em=h('p',{class:'err'});
+    return h('div',{},back,h('div',{class:'card form'},h('h3',{},ciTitle(r)||L('New item','صنف جديد')),
+      h('label',{},L('Item','الصنف'),h('select',{value:r.garmentType,onChange:e=>{r.garmentType=e.target.value}},h('option',{value:''},'—'),GT.map(g=>h('option',{value:g},gName(g))))),
+      fld(L('Style','الستايل'),()=>r.style,v=>r.style=v),fld(L('Model','الموديل'),()=>r.model,v=>r.model=v),fld(L('Color','اللون'),()=>r.color,v=>r.color=v),
+      fld(L('Quantity','الكمية'),()=>r.orderQty,v=>r.orderQty=v,{type:'number',min:0,inputmode:'numeric'}),
+      fld(L('PO Customer','PO العميل'),()=>r.poCustomer,v=>r.poCustomer=v),fld(L('Sales order','أمر البيع'),()=>r.salesOrder,v=>r.salesOrder=v),em,
+      h('div',{class:'row'},h('button',{type:'button',class:'btn p',onClick:async()=>{
+          ['style','model','color','orderQty','poCustomer','salesOrder'].forEach(k=>{r[k]=String(r[k]??'').trim()});
+          if(!(r.style||r.model||r.poCustomer||r.salesOrder)){em.textContent=L('Enter at least Style, Model, PO or Sales order.','اكتب على الأقل الستايل أو الموديل أو PO أو أمر البيع.');return}
+          const arr=ciRecs(c).slice(),i=arr.findIndex(x=>x.id===r.id);if(i>=0)arr[i]=r;else arr.push(r);c.items=arr;await custSave(c);await audit('customer_items_saved',c.id);CI_E=null;render()}},L('Save','حفظ')),
+        h('button',{type:'button',class:'btn',onClick:()=>{CI_E=null;render()}},L('Cancel','إلغاء')))))}
+  const items=ciRecs(c),note=h('p',{class:'hint ci-msg'});
+  const importBtn=h('button',{type:'button',class:'btn',onClick:e=>{const b=e.currentTarget,inp=document.createElement('input');inp.type='file';inp.accept='.xlsx';
+    inp.onchange=async()=>{const f=inp.files&&inp.files[0];if(!f)return;const t=b.textContent;b.disabled=true;b.textContent='⏳ …';msg.className='hint';msg.textContent='';
+      try{const d=await ciReadXlsx(f);if(!d.rows.length)throw new Error(L('No rows found under the titles.','لا توجد صفوف تحت العناوين.'));
+        if(!confirm(L('Import '+d.rows.length+' row(s) into “'+c.name+'”? Existing rows with the same data are updated.','استيراد '+d.rows.length+' صف إلى «'+c.name+'»؟ الصفوف المطابقة الموجودة يتم تحديثها.')))throw new Error('');
+        const r=await ciImport(c,d.rows);await audit('customer_items_imported',c.id,{add:r.add,upd:r.upd,file:f.name});
+        CUS_V=c.id;render();const m=document.querySelector('#view .ci-msg');if(m)m.textContent='✔ '+L('Added '+r.add+', updated '+r.upd+'.','تمت إضافة '+r.add+' وتحديث '+r.upd+'.')+(d.unknownG?' '+L(d.unknownG+' row(s) have an unknown Item (left blank).','تنبيه: '+d.unknownG+' صف بصنف غير معروف (تُرك فارغاً).'):'')}
+      catch(er){b.disabled=false;b.textContent=t;if(er&&er.message){msg.className='err';msg.textContent=er.message}}};inp.click()}},'📥 '+L('Import from Excel','استيراد من Excel'));
+  const tplBtn=h('button',{type:'button',class:'btn',onClick:async e=>{const b=e.currentTarget;b.disabled=true;try{await ciTemplate()}catch(er){alert(er.message)}b.disabled=false}},'⬇ '+L('Excel template','قالب Excel'));
+  const box=h('div',{class:'liblist'},...(items.length?items.map(r=>h('div',{class:'libitem'},h('div',{class:'libname'},h('b',{},ciTitle(r)||'—'),h('span',{class:'hint'},ciSub(r))),
+      h('button',{type:'button',class:'btn s libedit','aria-label':L('Edit','تعديل'),onClick:()=>{CI_E=Object.assign({},r);render()}},'✏️'),
+      h('button',{type:'button',class:'btn s d','aria-label':L('Delete','مسح'),onClick:async()=>{if(!confirm(L('Delete this row?','مسح هذا الصف؟')))return;c.items=ciRecs(c).filter(x=>x.id!==r.id);await custSave(c);await audit('customer_items_deleted',c.id);render()}},'🗑'))):[h('div',{class:'card empty'},h('h2',{},L('No data yet','لا توجد بيانات بعد')),h('p',{class:'hint'},L('Add rows by hand or import an Excel file.','أضف صفوفاً يدوياً أو استورد ملف Excel.')))]));
+  return h('div',{},back,h('div',{class:'row wrap',style:'margin-top:10px'},h('button',{type:'button',class:'btn p',onClick:()=>{CI_E=ciBlank();render()}},'＋ '+L('Add item','إضافة صنف')),importBtn,tplBtn),
+    note,msg,h('p',{class:'hint',style:'margin:6px 2px 0'},items.length+' '+L('rows','صف')+' · '+L('Excel titles: Item, Style, Model, Color, Quantity, PO Customer, Sales order (Arabic titles also work).','عناوين Excel: Item, Style, Model, Color, Quantity, PO Customer, Sales order (العناوين العربية تعمل أيضاً).')),box)}
+/* inspection form: fill the header from a customer row; edited fields turn yellow */
+const FILL_KEYS=['garmentType','model','style','poCustomer','salesOrder','orderQty','color'];
+const custRecFor=n=>(S.custs||[]).find(c=>!c.deleted&&norm(c.name)===norm(n));
+const fillEdited=k=>{const f=D&&D.fillSrc;return!!(f&&f.vals&&f.vals[k]!=null&&String(D[k]??'').trim()!==String(f.vals[k]).trim())};
+function custFillApply(c,r){const vals={};FILL_KEYS.forEach(k=>{const v=String(r[k]??'').trim();if(v)vals[k]=v});
+  if(FILL_KEYS.some(k=>k!=='garmentType'&&vals[k]&&String(D[k]??'').trim()&&String(D[k]).trim()!==vals[k])&&!confirm(L('Replace the data already typed in these fields?','استبدال البيانات المكتوبة في هذه الخانات؟')))return;
+  FILL_KEYS.forEach(k=>{if(vals[k])D[k]=vals[k]});
+  if(!String(D.orderNo||'').trim())D.orderNo=vals.poCustomer||vals.salesOrder||'';
+  D.fillSrc={custId:c.id,itemId:r.id,vals};dirty=true;okMsg='';render()}
+function custFillSheet(c){const ov=h('div',{class:'msov'}),list=h('div',{class:'mslist'});let q='';const close=()=>ov.remove();
+  const draw=()=>{const items=ciRecs(c).filter(r=>!q||norm([r.garmentType?gName(r.garmentType):'',r.style,r.model,r.color,r.poCustomer,r.salesOrder].join(' ')).includes(norm(q)));
+    list.replaceChildren(...(items.length?items.map(r=>h('button',{type:'button',class:'msrow',onClick:()=>{close();custFillApply(c,r)}},h('b',{},ciTitle(r)||'—'),h('div',{class:'hint'},ciSub(r)))):[h('p',{class:'hint',style:'padding:10px'},L('No match.','لا توجد نتائج.'))]))};
+  const search=h('input',{placeholder:L('Search style, model, PO…','ابحث بالستايل أو الموديل أو PO…'),onInput:e=>{q=e.target.value;draw()}});
+  ov.append(h('div',{class:'mssheet'},h('div',{class:'row'},h('b',{style:'flex:1;font-size:17px'},c.name),h('button',{type:'button',class:'btn s',onClick:close},'✕')),search,list));
+  ov.addEventListener('click',e=>{if(e.target===ov)close()});document.body.append(ov);draw()}
 let CUS_F={q:''},CUS_E=null;
 function vCustomers(){
  if(CUS_E){const e=CUS_E,msg=h('p',{class:'err'});
@@ -2235,12 +2318,14 @@ function vCustomers(){
      if(e.rec){const dup=(S.custs||[]).find(c=>c.id!==e.rec.id&&!c.deleted&&norm(c.name)===norm(n));if(dup){msg.textContent=L('Another customer has this name.','يوجد عميل آخر بنفس الاسم.');return}e.rec.name=n;await custSave(e.rec);await audit('customer_updated',e.rec.id)}
      else{const r=await custAdd(n);if(!r.ok){msg.textContent=r.msg;return}await audit('customer_added',r.rec.id)}
      CUS_E=null;render()}},L('Save','حفظ')),h('button',{class:'btn',onClick:()=>{CUS_E=null;render()}},L('Cancel','إلغاء'))))}
+ if(CUS_V){const cc=(S.custs||[]).find(x=>x.id===CUS_V&&!x.deleted);if(cc)return vCustItems(cc);CUS_V=null;CI_E=null}
  const box=h('div',{class:'liblist'}),cnt=h('p',{class:'hint',style:'margin:6px 2px 0'});
  const used=n=>S.ins.filter(i=>!i.deletedAt&&norm(i.customer)===norm(n)).length;
  const missing=()=>{const have=new Set((S.custs||[]).map(c=>norm(c.name)));return[...new Set(S.ins.map(i=>String(i.customer||'').trim()).filter(Boolean))].filter(n=>!have.has(norm(n)))};
  const fill=()=>{const r=custRecs().filter(c=>!CUS_F.q||norm(c.name).includes(norm(CUS_F.q)));cnt.textContent=r.length+' '+L('customers','عميل');
   box.replaceChildren(...(r.length?r.map(c=>h('div',{class:'libitem'},h('div',{class:'libname'},h('b',{},c.name),h('span',{class:'hint'},used(c.name)+' '+L('inspections','فحص'))),
-    h('button',{type:'button',class:'btn s libedit','aria-label':L('Edit','تعديل'),onClick:()=>{CUS_E={rec:c,name:c.name};render()}},'✏️'),
+    h('button',{type:'button',class:'btn s',onClick:()=>{CUS_V=c.id;CI_E=null;render()}},'📋 '+L('Data','البيانات')+' ('+ciRecs(c).length+')'),
+     h('button',{type:'button',class:'btn s libedit','aria-label':L('Edit','تعديل'),onClick:()=>{CUS_E={rec:c,name:c.name};render()}},'✏️'),
     isMgr()?h('button',{type:'button',class:'btn s d','aria-label':L('Delete','مسح'),onClick:async()=>{if(!confirm(L('Delete “'+c.name+'”? Past inspections keep the name.','مسح «'+c.name+'»؟ الفحوصات القديمة تحتفظ بالاسم.')))return;await custDelete(c);await audit('customer_deleted',c.id);render()}},'🗑 '+L('Delete','مسح')):null)):[h('div',{class:'card empty'},h('h2',{},L('No customers yet','لا يوجد عملاء بعد')),h('p',{class:'hint'},L('Add the customers you work with.','أضف العملاء اللي بتشتغل معاهم.')))]))};
  fill();const mm=missing();
  return h('div',{},h('div',{class:'libbar'},h('div',{class:'libsearch'},h('span',{},'🔍'),h('input',{value:CUS_F.q,placeholder:L('Search for a customer…','ابحث عن عميل…'),onInput:e=>{CUS_F.q=e.target.value;fill()}})),

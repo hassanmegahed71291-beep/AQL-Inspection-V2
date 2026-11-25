@@ -482,3 +482,30 @@ html[data-theme="dark"] .cc-top-defects div{color:#c1cfdf}
 .fold-po>summary::-webkit-details-marker{display:none}
 .fold-po>.list{padding:0 10px 10px;margin-top:0}
 html[data-theme="dark"] .fold{background:#121e30;color:var(--ink)}
+
+/* v25: page header + mobile fit */
+.pghead{margin:0 0 12px;padding-bottom:8px;border-bottom:2px solid #17365b}
+.pghead-t{font-weight:800;font-size:17px;color:#17365b;margin-top:6px}
+html[data-theme="dark"] .pghead{border-bottom-color:#2c4a6e}
+html[data-theme="dark"] .pghead-t{color:#cfe0f2}
+@media print{.pghead{display:none}}
+html,body{max-width:100%;overflow-x:hidden}
+#view,.stack,.two,.grid,.filters{min-width:0}
+.two{grid-template-columns:minmax(0,1fr)}
+@media(min-width:900px){.two{grid-template-columns:1fr 1fr}}
+.two>*,.stack>*,.grid>*,.card{min-width:0;max-width:100%}
+.card{overflow-wrap:anywhere}
+@media(max-width:600px){
+ .pie-wrap{flex-direction:column;align-items:stretch;gap:10px}
+ .pie-wrap .pie{align-self:center;width:140px;height:140px}
+ .pie-total{width:72px;height:72px;font-size:19px}
+ .pie-leg{min-width:0;width:100%}
+ .pie-leg li{font-size:13px;align-items:flex-start}
+ .pie-leg li i{margin-top:3px}
+ .pie-leg li span{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
+}
+
+/* v26: customer data + fill-from-customer */
+.custfill{margin:0 0 10px}.custfill .btn{width:100%}
+.sheet .hb input.cedit,.sheet .hb select.cedit,.cedit{background:rgba(255,193,7,.28)!important;border-bottom:2px solid #ffc107!important;color:#fff3b0!important}
+.msrow b{display:block}.msrow .hint{display:block;margin-top:2px}
