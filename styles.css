@@ -514,7 +514,7 @@ html,body{max-width:100%;overflow-x:hidden}
 .top-actions{display:flex;align-items:center;gap:clamp(5px,1.2vw,11px);direction:rtl;flex:0 0 auto}
 .main:not(.inspection-report-route) .top{direction:ltr;justify-content:space-between}
 .main:not(.inspection-report-route) .top-brand{margin:0;flex:0 1 auto;min-width:0;order:0}
-.main:not(.inspection-report-route) .top-actions{margin-inline-start:auto}
+.main:not(.inspection-report-route) .top-actions{margin-left:auto;margin-right:0}
 .menu-theme .menu-logout{margin-top:6px;color:#b91c1c;border-color:#f1c4c4}
 .side .btn.ghost.s{width:100%}
 
