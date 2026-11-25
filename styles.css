@@ -509,3 +509,11 @@ html,body{max-width:100%;overflow-x:hidden}
 .custfill{margin:0 0 10px}.custfill .btn{width:100%}
 .sheet .hb input.cedit,.sheet .hb select.cedit,.cedit{background:rgba(255,193,7,.28)!important;border-bottom:2px solid #ffc107!important;color:#fff3b0!important}
 .msrow b{display:block}.msrow .hint{display:block;margin-top:2px}
+
+/* v27: top bar = brand on the left, buttons grouped on the right; sign-out lives in the menu */
+.top-actions{display:flex;align-items:center;gap:clamp(5px,1.2vw,11px);direction:rtl;flex:0 0 auto}
+.main:not(.inspection-report-route) .top{direction:ltr;justify-content:space-between}
+.main:not(.inspection-report-route) .top-brand{margin:0;flex:0 1 auto;min-width:0;order:0}
+.main:not(.inspection-report-route) .top-actions{margin-inline-start:auto}
+.menu-theme .menu-logout{margin-top:6px;color:#b91c1c;border-color:#f1c4c4}
+.side .btn.ghost.s{width:100%}
