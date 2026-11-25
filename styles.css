@@ -521,3 +521,29 @@ html,body{max-width:100%;overflow-x:hidden}
 /* v29: delete button in the defect library */
 .libitem .libdel{min-width:36px;padding:0;justify-content:center;background:transparent}
 @media(max-width:480px){.libitem{flex-wrap:wrap;row-gap:8px}.libitem .libname{flex:1 1 100%}.libitem .libadd{margin-inline-start:auto}}
+
+/* v32: top bar fixed on EVERY page (brand far left, the 4 buttons far right with a gap between) + one dark-navy menu everywhere */
+.main .top{direction:ltr!important;align-items:center;justify-content:flex-start!important;padding-left:12px!important;padding-right:12px!important}
+.main .top-brand{position:static!important;transform:none!important;left:auto!important;right:auto!important;margin:0!important;flex:0 1 auto;min-width:0;order:0}
+.main .top-actions{display:flex;align-items:center;direction:rtl;gap:clamp(8px,2.4vw,14px);margin-left:auto!important;margin-right:0!important;flex:0 0 auto;order:1}
+.main .autosave-status{order:2}
+/* the inspection-report page gets the same navy header look as every other page */
+.main.inspection-report-route .top{background:linear-gradient(105deg,#0b1b31 0%,#102b4b 58%,#173a60 100%);color:#f8fbff;border:0;border-bottom:1px solid #294969;min-height:76px;padding-top:calc(9px + env(safe-area-inset-top));padding-bottom:9px}
+.main.inspection-report-route .top-brand{display:flex;align-items:center;gap:7px;color:#fff;font-size:clamp(18px,4.4vw,23px);font-weight:900;letter-spacing:.8px;white-space:nowrap;line-height:1}
+.main.inspection-report-route .top-brand img{width:54px;height:54px;max-width:54px;max-height:54px;object-fit:contain;margin:0}
+.main.inspection-report-route .top-action,.main.inspection-report-route .menu-toggle{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:38px;height:40px;min-width:38px;min-height:40px;padding:0;border:1px solid #426080;border-radius:11px;background:rgba(255,255,255,.09);color:#f4f8ff;font-size:18px;cursor:pointer}
+.main.inspection-report-route .menu-toggle{font-size:21px;color:#fff}
+.main.inspection-report-route .cloud-chip{position:relative;flex:0 0 auto;width:38px;height:40px;min-height:40px;padding:0;display:inline-flex;align-items:center;justify-content:center;border:1px solid #426080;border-radius:11px;background:rgba(255,255,255,.09);color:#e9f5ff;font-size:0;overflow:hidden}
+.main.inspection-report-route .cloud-chip::before{content:'☁';font-size:21px;line-height:1;color:#e9f5ff}
+.main.inspection-report-route .autosave-status{display:none}
+@media(max-width:420px){.main.inspection-report-route .top-brand img{width:46px;height:46px;max-width:46px;max-height:46px}.main.inspection-report-route .top-brand{font-size:17px}.main.inspection-report-route .top-action,.main.inspection-report-route .menu-toggle,.main.inspection-report-route .cloud-chip{width:33px;height:36px;min-width:33px;min-height:36px;border-radius:9px}}
+/* one dark-navy menu on every page */
+.main .top-menu,.main:not(.inspection-report-route) .top-menu{background:#0b1b31;color:#e8f1fb;border:1px solid #294969;box-shadow:0 14px 34px rgba(3,10,20,.45)}
+.main .top-menu a,.main:not(.inspection-report-route) .top-menu a{color:#d8e7f4}
+.main .top-menu a.on,.main:not(.inspection-report-route) .top-menu a.on{background:#173a60;color:#7fd3ff}
+.main .menu-theme,.main:not(.inspection-report-route) .menu-theme{border-top:1px solid #2b4560}
+.main .menu-theme .btn,.main:not(.inspection-report-route) .menu-theme .btn{width:100%;justify-content:flex-start;background:rgba(255,255,255,.08);color:#f4f8ff;border:1px solid #426080}
+.main .menu-theme .menu-logout,.main:not(.inspection-report-route) .menu-theme .menu-logout{margin-top:6px;color:#ffb4b4;border-color:#7a3a3a}
+.menu-ver{text-align:center;font-size:11px;color:#7f96ad;padding:8px 0 2px}
+@media(max-width:899px){.main .top-menu{position:fixed;top:calc(78px + env(safe-area-inset-top));inset-inline:10px;z-index:45}}
+.main.inspection-report-route .cloud-chip.ok::after{content:'✓';font-size:9px;position:absolute;margin:15px 0 0 13px;background:#16a34a;color:#fff;border-radius:50%;width:12px;height:12px;line-height:12px;text-align:center}
