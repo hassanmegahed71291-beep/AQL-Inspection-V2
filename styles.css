@@ -517,3 +517,7 @@ html,body{max-width:100%;overflow-x:hidden}
 .main:not(.inspection-report-route) .top-actions{margin-inline-start:auto}
 .menu-theme .menu-logout{margin-top:6px;color:#b91c1c;border-color:#f1c4c4}
 .side .btn.ghost.s{width:100%}
+
+/* v29: delete button in the defect library */
+.libitem .libdel{min-width:36px;padding:0;justify-content:center;background:transparent}
+@media(max-width:480px){.libitem{flex-wrap:wrap;row-gap:8px}.libitem .libname{flex:1 1 100%}.libitem .libadd{margin-inline-start:auto}}
