@@ -179,7 +179,7 @@ function render(){document.documentElement.lang=S.lang;document.documentElement.
   const v=({'':vPanel,new:vIns,i:vIns,archive:()=>vList(false),reports:()=>vList(true),charts:vCharts,monthly:vMonthly,compare:vCompare,cmpcust:vCmpCust,library:vLib,customers:vCustomers,aql:vAql,settings:vSettings,inspset:vInspSet,report:vReport,cloud:vCloud})[hash.split('/')[1]||'']||vDash;
   $('#app').replaceChildren(h('div',{class:'shell'},
     h('aside',{class:'side'},h('div',{class:'brand'},h('div',{class:'brand-wordmark',dir:'ltr'},h('img',{src:'./icons/meyar-192.png',alt:'M'}),h('b',{},'EYAR')),h('small',{},fac)),navs.map(link),h('div',{style:'margin-top:auto;display:grid;gap:8px'},themeButton(),h('small',{style:'color:#8fa6bb;padding:0 8px'},S.me.name+' · '+(isMgr()?L('Manager','مدير'):L('Inspector','مفتش'))),sw,outBtn)),
-    h('div',{class:'main'+(hash.split('/')[1]==='report'?' inspection-report-route':'')},h('header',{class:'top',style:'direction:ltr'},h('div',{class:'top-brand',dir:'ltr',style:'margin:0'},h('img',{src:'./icons/meyar-192.png',alt:'MEYAR'}),h('span',{},'MEYAR')),h('div',{class:'top-actions',style:'margin-left:auto;margin-right:0'},(ROUTE!=='#/'&&!ROUTE.startsWith('#/report/')?h('button',{class:'top-action page-back',type:'button','aria-label':L('Back','رجوع'),title:L('Back','رجوع'),onClick:()=>{if(history.state&&history.state.from)history.back();else go('#/')}},'←'):null),h('button',{class:'menu-toggle',type:'button','aria-label':'Open navigation',title:L('Menu','القائمة'),onClick:()=>{const m=$('#top-menu');if(m)m.classList.toggle('open')}},'☰'),cloudChipEl(),h('button',{class:'top-action lang-action',type:'button',title:L('Change language','تغيير اللغة'),onClick:()=>{switchLang()}},'🌐')),h('span',{id:'autosave-status',class:'autosave-status'},dirty?L('Unsaved changes','تغييرات غير محفوظة'):L('Saved','تم الحفظ'))),h('nav',{id:'top-menu',class:'top-menu'},[...navs.map(link),h('div',{class:'menu-theme'},themeButton(),h('button',{class:'btn ghost s menu-logout',type:'button',onClick:signOut},'⎋ '+L('Sign out','تسجيل الخروج'))),h('div',{class:'menu-ver'},'MEYAR · v32')]),h('main',{id:'view'},pageHead(),pagePdfBar(),v()))));
+    h('div',{class:'main'+(hash.split('/')[1]==='report'?' inspection-report-route':'')},h('header',{class:'top',style:'direction:ltr'},h('div',{class:'top-brand',dir:'ltr',style:'margin:0'},h('img',{src:'./icons/meyar-192.png',alt:'MEYAR'}),h('span',{},'MEYAR')),h('div',{class:'top-actions',style:'margin-left:auto;margin-right:0'},(ROUTE!=='#/'&&!ROUTE.startsWith('#/report/')?h('button',{class:'top-action page-back',type:'button','aria-label':L('Back','رجوع'),title:L('Back','رجوع'),onClick:()=>{if(history.state&&history.state.from)history.back();else go('#/')}},'←'):null),h('button',{class:'menu-toggle',type:'button','aria-label':'Open navigation',title:L('Menu','القائمة'),onClick:()=>{const m=$('#top-menu');if(m)m.classList.toggle('open')}},'☰'),cloudChipEl(),h('button',{class:'top-action lang-action',type:'button',title:L('Change language','تغيير اللغة'),onClick:()=>{switchLang()}},'🌐')),h('span',{id:'autosave-status',class:'autosave-status'},dirty?L('Unsaved changes','تغييرات غير محفوظة'):L('Saved','تم الحفظ'))),h('nav',{id:'top-menu',class:'top-menu'},[...navs.map(link),h('div',{class:'menu-theme'},themeButton(),h('button',{class:'btn ghost s menu-logout',type:'button',onClick:signOut},'⎋ '+L('Sign out','تسجيل الخروج'))),h('div',{class:'menu-ver'},'MEYAR · v33')]),h('main',{id:'view'},pageHead(),pagePdfBar(),v()))));
   if(SCROLL_TO_TOP){SCROLL_TO_TOP=false;requestAnimationFrame(()=>scrollTo(0,0))}else restoreScrollState(scrollSnapshot);if(!LE)LIB_EDIT_SCROLL=null}
 /* ---------- dashboard ---------- */
 function vDash(){const done=S.ins.filter(i=>['approved','rejected'].includes(i.status));const c=s=>S.ins.filter(i=>s.includes(i.status)).length;const defs=done.flatMap(i=>i.defs||[]);const sum=k=>defs.reduce((a,d)=>a+num(d[k]),0);
@@ -582,6 +582,73 @@ function analysisReportHeader(title,rows){
 }
 const analysisDateRange=(from,to)=>from&&to?`${fmtDate(from)} – ${fmtDate(to)}`:from?`${L('From','من')} ${fmtDate(from)}`:to?`${L('To','إلى')} ${fmtDate(to)}`:L('All available dates','كل الفترات المتاحة');
 
+/* ===== "Who performed better?" section of the customer-vs-factory comparison report (v33) ===== */
+const cmpN=x=>{const v=Number(x);return isFinite(v)?v:0},cmpSum=a=>a.reduce((s,x)=>s+cmpN(x),0);
+const CMP_SEVS=['critical','major','minor'],CMP_SEVN={critical:['Critical','حرج'],major:['Major','رئيسي'],minor:['Minor','ثانوي']};
+function cmpAnalyse(rec){
+  const fac=rec.fac,cus=rec.cus||{},rows=rec.defRows||[],cd=rec.cusDefs||[],f1=x=>x.toFixed(1);
+  const caught=rows.filter(r=>r.fd&&r.cd),missed=rows.filter(r=>!r.fd&&r.cd),facOnly=cd.length?rows.filter(r=>r.fd&&!r.cd):[],sevGap=rows.filter(r=>r.st==='sev');
+  const fS=cmpN(fac.sampleSize),cS=cmpN(cus.sampleSize),fTot=cmpSum((fac.defs||[]).map(d=>d.count)),cTot=cmpSum(cd.map(d=>d.count));
+  const fRate=fS>0?fTot/fS*100:null,cRate=cS>0&&cd.length?cTot/cS*100:null,types=caught.length+missed.length;
+  const detType=types?caught.length/types*100:null,detPcs=cTot?cmpSum(caught.map(r=>Math.min(cmpN(r.fd.count),cmpN(r.cd.count))))/cTot*100:null;
+  const hi=missed.filter(r=>r.cd.severity==='critical'||r.cd.severity==='major');
+  const level=!cd.length?'na':hi.length?'bad':missed.length?'warn':'ok';
+  let strict=null;if(fRate!=null&&cRate!=null){const q=cRate>0?fRate/cRate:(fRate>0?9:1);strict=q>=1.15?'stricter':q<=0.85?'lenient':'similar'}
+  const fa=fRate!=null?f1(fRate):'',ca=cRate!=null?f1(cRate):'';
+  const head={ok:['The factory inspection recorded every defect type reported by the customer.','فحص المصنع سجّل كل أنواع العيوب التي ذكرها العميل.'],
+    warn:[`The factory recorded ${caught.length} of ${types} defect types reported by the customer; ${missed.length} minor type(s) were not recorded.`,`سجّل المصنع ${caught.length} من ${types} نوع عيب ذكرها العميل، و${missed.length} نوع ثانوي لم يُسجَّل.`],
+    bad:[`${hi.length} major/critical defect type(s) found by the customer were not recorded by the factory.`,`${hi.length} نوع عيب رئيسي/حرج وجدها العميل لم يسجّلها المصنع.`],
+    na:['Customer defect details were not entered, so detection could not be assessed.','لم تُدخل تفاصيل عيوب العميل، لذلك تعذّر تقييم الرصد.']}[level];
+  const rate=strict==='stricter'?[`The factory inspection was stricter: ${fa} vs ${ca} defective pieces per 100 inspected.`,`فحص المصنع كان أشد: ${fa} مقابل ${ca} قطعة معيبة لكل 100 قطعة مفحوصة.`]
+    :strict==='lenient'?[`The customer found more defects per 100 pieces (${ca} vs ${fa} at the factory).`,`العميل وجد عيوباً أكثر لكل 100 قطعة (${ca} مقابل ${fa} عند المصنع).`]
+    :strict==='similar'?[`Defect rates are similar (${fa} vs ${ca} per 100 pieces).`,`نسب العيوب متقاربة (${fa} مقابل ${ca} لكل 100 قطعة).`]:['',''];
+  const fo=facOnly.length?[`The factory also caught ${facOnly.length} defect type(s) that the customer did not report.`,`كما رصد المصنع ${facOnly.length} نوع عيب لم يذكرها العميل.`]:['',''];
+  const sg=sevGap.length?[`${sevGap.length} defect(s) were classified at a different severity by the customer.`,`${sevGap.length} عيب صنّفه العميل بخطورة مختلفة.`]:['',''];
+  const facBy={},cusBy={},hasF=cd.length||['Critical','Major','Minor'].some(c=>cus['found'+c]!==''&&cus['found'+c]!=null);
+  CMP_SEVS.forEach(s=>{const C=s[0].toUpperCase()+s.slice(1);facBy[s]=cmpN(fac.cats&&fac.cats[s]&&fac.cats[s].found);cusBy[s]=cd.length?cmpSum(cd.filter(d=>d.severity===s).map(d=>d.count)):cmpN(cus['found'+C])});
+  return{caught,missed,facOnly,sevGap,fRate,cRate,types,detType,detPcs,level,strict,headEn:head[0],headAr:head[1],rateEn:rate[0],rateAr:rate[1],foEn:fo[0],foAr:fo[1],sgEn:sg[0],sgAr:sg[1],facBy,cusBy,hasCus:!!hasF,
+    missedPcs:cmpSum(missed.map(r=>r.cd.count)),facOnlyPcs:cmpSum(facOnly.map(r=>r.fd.count)),cd}}
+function cmpVerdictBlocks(rec,A){
+  const NAVY='#1f4e79',SEVC={critical:'#b91c1c',major:'#c2410c',minor:'#64748b'};
+  const LV={ok:['STRONG','قوي','#15803d','#ecfdf3'],warn:['ACCEPTABLE','مقبول','#b45309','#fffbeb'],bad:['NEEDS ATTENTION','يحتاج مراجعة','#b91c1c','#fef2f2'],na:['NOT ASSESSED','غير مُقيَّم','#475569','#f1f5f9']}[A.level];
+  const bi=(en,ar,st)=>h('div',{style:st||''},en,h('div',{dir:'rtl',style:'font-size:8.5px;color:#64748b;font-weight:400;text-align:left;margin-top:1px'},ar));
+  const out=[];
+  /* 1 — title, verdict and three key figures */
+  const title=h('div',{class:'cmp-h',style:'font-size:13px;margin:12px 0 6px;border-bottom:2px solid '+NAVY+';padding-bottom:3px'},cmpBi('Performance Verdict — Who Performed Better?','الحكم على الأداء — مين الأفضل؟'));
+  const verdict=h('div',{style:`display:flex;gap:12px;align-items:stretch;background:${LV[3]};border:1px solid ${LV[2]};border-left:6px solid ${LV[2]};border-radius:6px;padding:9px 12px`},
+    h('div',{style:`min-width:112px;display:flex;flex-direction:column;justify-content:center;border-right:1px solid ${LV[2]};padding-right:12px`},h('div',{style:'font-size:8px;letter-spacing:.6px;color:#64748b'},'FACTORY INSPECTION'),h('div',{style:`font-size:15px;font-weight:800;color:${LV[2]};line-height:1.15;margin-top:2px`},LV[0]),h('div',{dir:'rtl',style:`font-size:10px;color:${LV[2]};text-align:left;margin-top:1px`},LV[1])),
+    h('div',{style:'flex:1;min-width:0;font-size:10px;line-height:1.35;color:#0f172a'},bi(A.headEn,A.headAr,'font-weight:700;font-size:11px'),A.rateEn?h('div',{style:'margin-top:5px'},bi(A.rateEn,A.rateAr)):null));
+  const card=(en,ar,...kids)=>h('div',{style:'border:1px solid #d7dee7;border-radius:6px;padding:8px 10px;background:#fff;min-width:0'},h('div',{style:'font-size:8.5px;letter-spacing:.4px;color:#64748b;text-transform:uppercase'},en),h('div',{dir:'rtl',style:'font-size:8.5px;color:#94a3b8;text-align:left;margin-bottom:3px'},ar),...kids);
+  const mx=Math.max(A.fRate||0,A.cRate||0,0.0001);
+  const bar=(lab,v,col)=>h('div',{style:'margin-top:5px'},h('div',{style:'display:flex;justify-content:space-between;font-size:9.5px'},h('span',{},lab),h('b',{style:'color:#0f172a'},v==null?'—':v.toFixed(1))),h('div',{style:'height:6px;background:#eef2f6;border-radius:3px;margin-top:2px'},h('div',{style:`height:6px;border-radius:3px;background:${col};width:${v==null?0:Math.max(3,v/mx*100)}%`})));
+  const tp=(n,pcs)=>A.level==='na'?'—':n?`${n} type${n>1?'s':''} · ${pcs} pcs`:'0';
+  const row2=(col,en,ar,v)=>h('div',{style:'display:flex;justify-content:space-between;align-items:center;margin-top:5px;font-size:9.5px;gap:6px'},h('span',{style:'min-width:0'},en,h('div',{dir:'rtl',style:'color:#94a3b8;font-size:8.5px;text-align:left'},ar)),h('b',{style:`color:${col};font-size:11px;white-space:nowrap`},v));
+  const kpis=h('div',{style:'display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:8px'},
+    card('Defects per 100 pieces','العيوب لكل 100 قطعة',bar('Factory / المصنع',A.fRate,NAVY),bar('Customer / العميل',A.cRate,'#94a3b8')),
+    card('Detection rate','نسبة الرصد',h('div',{style:`font-size:24px;font-weight:800;color:${LV[2]};line-height:1.1`},A.detType==null?'—':Math.round(A.detType)+'%'),
+      h('div',{style:'font-size:9px;color:#475569;margin-top:2px'},A.types?`${A.caught.length} of ${A.types} customer defect types were also recorded by the factory`:'No customer defect list'),
+      A.detPcs!=null?h('div',{style:'font-size:8.5px;color:#94a3b8;margin-top:2px'},`By pieces: ${Math.round(A.detPcs)}%`):null),
+    card('Escaped vs caught early','هروب مقابل رصد مبكر',row2(A.level==='na'?'#94a3b8':A.missed.length?'#b91c1c':'#15803d','Missed by factory','هربت من المصنع',tp(A.missed.length,A.missedPcs)),row2(A.level==='na'?'#94a3b8':'#1f4e79','Caught only by factory','رصدها المصنع فقط',tp(A.facOnly.length,A.facOnlyPcs))));
+  out.push({est:250,nodes:[title,verdict,kpis]});
+  /* 2 — severity breakdown */
+  const rd=(f,c)=>{if(!A.hasCus)return['—','#94a3b8'];return c>f?['Customer found more','#b91c1c']:c<f?['Factory found more',NAVY]:['Same','#15803d']};
+  const sevRows=CMP_SEVS.map(s=>[CMP_SEVN[s],A.facBy[s],A.cusBy[s],s]);
+  const totF=cmpSum(CMP_SEVS.map(s=>A.facBy[s])),totC=cmpSum(CMP_SEVS.map(s=>A.cusBy[s]));
+  const trs=[...sevRows.map(([n,f,c,s])=>[bi(n[0],n[1]),f,c,s]),[h('b',{},'Total / الإجمالي'),totF,totC,null]].map(([lab,f,c,s])=>{const r=rd(f,c),d=c-f;
+    return h('tr',{},h('td',{style:s?`border-left:3px solid ${SEVC[s]}`:'font-weight:700'},lab),h('td',{style:'text-align:center'},String(f)),h('td',{style:'text-align:center'},A.hasCus?String(c):'—'),h('td',{style:'text-align:center'},A.hasCus?(d>0?'+'+d:String(d)):'—'),h('td',{style:`color:${r[1]};font-weight:700`},r[0]))});
+  out.push({est:165,nodes:[h('div',{class:'cmp-h'},cmpBi('Severity breakdown','تفصيل حسب الخطورة')),h('table',{class:'cmp-t'},h('thead',{},h('tr',{},[['Severity / الخطورة','28%'],['Factory found / المصنع','18%'],['Customer found / العميل','18%'],['Difference / الفرق','14%'],['Reading / القراءة','22%']].map(c=>h('th',{style:'width:'+c[1]},c[0])))),h('tbody',{},trs))]});
+  /* 3 — what escaped / what was caught early */
+  const li=(name,sub,sev,count)=>h('div',{style:'display:flex;gap:6px;align-items:baseline;border-bottom:1px solid #eef2f6;padding:3px 0;font-size:9.5px'},h('span',{style:`color:${SEVC[sev]||'#64748b'};font-size:8px;font-weight:700;min-width:42px`},sev?CMP_SEVN[sev][0].toUpperCase():'—'),h('span',{style:'flex:1;min-width:0'},name,sub?h('span',{dir:'rtl',style:'color:#94a3b8;font-size:8.5px;margin:0 6px'},sub):null),h('b',{},String(count)));
+  const lst=(en,ar,col,items,mk)=>h('div',{style:`border:1px solid #d7dee7;border-top:3px solid ${col};border-radius:6px;padding:7px 10px;min-width:0`},h('div',{style:`font-size:10px;font-weight:700;color:${col}`},en),h('div',{dir:'rtl',style:'font-size:8.5px;color:#94a3b8;text-align:left;margin-bottom:3px'},ar),
+    items.length?[...items.slice(0,6).map(mk),items.length>6?h('div',{style:'font-size:8.5px;color:#64748b;padding-top:3px'},`+ ${items.length-6} more`):null]:h('div',{style:`font-size:9.5px;color:${A.level==='na'?'#64748b':'#15803d'};padding:4px 0`},A.level==='na'?'Not available — customer list not entered / غير متاح':'None / لا يوجد'));
+  const nRows=Math.min(6,Math.max(A.missed.length,A.facOnly.length,1))+(Math.max(A.missed.length,A.facOnly.length)>6?1:0);
+  out.push({est:70+19*nRows,nodes:[h('div',{style:'display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px'},
+    lst('Missed by the factory — found only by the customer','هربت من المصنع — وجدها العميل فقط','#b91c1c',A.missed,r=>li(r.cd.name,'',r.cd.severity,r.cd.count)),
+    lst('Caught only by the factory','رصدها المصنع فقط','#1f4e79',A.facOnly,r=>li(r.fd.nameEn||r.fd.nameAr,r.fd.nameEn?r.fd.nameAr:'',r.fd.severity,r.fd.count)))]});
+  /* 4 — conclusion */
+  const en=[A.headEn,A.rateEn,A.foEn,A.sgEn].filter(Boolean).join(' '),ar=[A.headAr,A.rateAr,A.foAr,A.sgAr].filter(Boolean).join(' ');
+  out.push({est:92,nodes:[h('div',{style:`margin-top:10px;border:1px solid #d7dee7;border-left:5px solid ${LV[2]};border-radius:6px;padding:8px 12px;background:#fafbfd`},h('div',{style:`font-size:10px;font-weight:800;color:${LV[2]};letter-spacing:.4px`},'CONCLUSION  ·  الخلاصة'),h('div',{style:'font-size:10px;line-height:1.4;color:#0f172a;margin-top:3px'},en),h('div',{dir:'rtl',style:'font-size:10px;line-height:1.45;color:#334155;margin-top:3px;text-align:left'},ar))]});
+  return out}
 async function cmpBuildPages(rec,imgs,stage){
   const pages=[],sm=rec.summary,fac=rec.fac;let page=null;
   const room=()=>{const top=page.getBoundingClientRect().top;let m=0;[...page.children].forEach(c=>{m=Math.max(m,c.getBoundingClientRect().bottom-top)});return CMP_BOTTOM-m};
@@ -600,6 +667,7 @@ async function cmpBuildPages(rec,imgs,stage){
     h('small',{},` Factory: ${resTxt} · Customer: ${rec.cus.result?rec.cus.result.toUpperCase():'—'}`)));
   const met=(l,ar,v)=>h('div',{class:'cmp-met'},h('div',{},l,h('div',{dir:'rtl',style:'font-size:8px;text-align:left'},ar)),h('b',{},String(v)));
   page.append(h('div',{style:'display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin:8px 0'},met('Fields compared','حقول تمت مقارنتها',sm.compared),met('Matching','مطابقة',sm.match+sm.partial),met('Differences','اختلافات',sm.diff+sm.defDiff+sm.defFacOnly+sm.defCusOnly),met('Not available','غير متاحة',sm.na+sm.pend)));
+  cmpVerdictBlocks(rec,cmpAnalyse(rec)).forEach(b=>{if(room()<b.est)nextPage(true);b.nodes.forEach(n=>page.append(n))});
   addTable('1. Field-by-field comparison / مقارنة الحقول',[['Field / الحقل','27%'],['Factory report / المصنع','24%'],['Customer report / العميل','24%'],['Status / الحالة','25%']],rec.rows,
     r=>h('tr',{},h('td',{},cmpBi(r.en,r.ar)),h('td',{},cmpDisp(r.type,r.f,true)),h('td',{},cmpDisp(r.type,r.c,true)),h('td',{},cmpStat(r.st,true))));
   const sevT={critical:'Critical',major:'Major',minor:'Minor'};
